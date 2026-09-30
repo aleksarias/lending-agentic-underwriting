@@ -1,7 +1,7 @@
 """Audit trail: every state-changing agent/tool action (who, what, cost, inputs, outputs), credentials redacted.
 
-Rows are buffered in memory and flushed to `ops.agent_trace` by the harness/pipeline identity; agents have no
-grant on `ops`, so they cannot alter their own trail.
+Rows are buffered in memory and flushed to `ops.agent_trace` (after every agent run, and at the end of a cycle) by
+the harness/pipeline identity; agents have no grant on `ops`, so they cannot alter their own trail.
 """
 
 from __future__ import annotations
@@ -66,10 +66,17 @@ class TraceWriter:
         return list(self._rows)
 
     def flush(self) -> int:
+        """Write buffered rows to `ops.agent_trace`. On failure they stay buffered (in order) for the next flush,
+        so flushing after every agent run can never lose audit rows to a transient write error."""
         from lau.store import get_store
 
         with self._lock:
             rows, self._rows = self._rows, []
         if rows:
-            get_store("harness").write_df("ops", "agent_trace", pd.DataFrame(rows), mode="append")
+            try:
+                get_store("harness").write_df("ops", "agent_trace", pd.DataFrame(rows), mode="append")
+            except Exception:
+                with self._lock:
+                    self._rows = rows + self._rows
+                raise
         return len(rows)

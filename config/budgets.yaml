@@ -16,5 +16,6 @@ agents:                          # per-agent-run caps
   redteam:    {max_turns: 25, max_budget_usd: 1.50, timeout_min: 15}
   compliance: {max_turns: 15, max_budget_usd: 0.75, timeout_min: 10}
   curator:    {max_turns: 10, max_budget_usd: 0.50, timeout_min: 5}
+  ask:        {max_turns: 8, max_budget_usd: 0.25, timeout_min: 3}   # console questions (read-only)
 holdout:
   max_gate_evaluations_per_definition: 5   # the holdout is a scarce resource too

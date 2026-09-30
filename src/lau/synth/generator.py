@@ -19,6 +19,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from lau.synth import cashflow as cf
+
 CAUSAL = {
     "bureau_score": -0.012,  # per point vs 690
     "dti": 2.2,  # vs 0.30
@@ -50,6 +52,7 @@ class SynthData:
     field_lineage: pd.DataFrame
     new_applications: pd.DataFrame
     ground_truth: dict[str, Any] = field(default_factory=dict)
+    transactions: pd.DataFrame = field(default_factory=pd.DataFrame)  # raw bank-statement rows (all applicants)
 
 
 def _sigmoid(x: np.ndarray) -> np.ndarray:
@@ -57,8 +60,14 @@ def _sigmoid(x: np.ndarray) -> np.ndarray:
 
 
 def _applications(
-    rng: np.random.Generator, n: int, months: list[pd.Period], drift_start: pd.Period, n_noise: int, id_prefix: str
-) -> tuple[pd.DataFrame, np.ndarray, pd.DataFrame]:
+    rng: np.random.Generator,
+    n: int,
+    months: list[pd.Period],
+    drift_start: pd.Period,
+    n_noise: int,
+    id_prefix: str,
+    cf_cfg: dict[str, Any],
+) -> tuple[pd.DataFrame, np.ndarray, pd.DataFrame, pd.DataFrame]:
     # Origination month with mild growth
     w = np.linspace(1.0, 1.6, len(months))
     m_idx = rng.choice(len(months), size=n, p=w / w.sum())
@@ -94,6 +103,10 @@ def _applications(
     util = rng.beta(2.0, 3.0, size=n)
     inq = rng.poisson(1.2 + 0.4 * post_drift, size=n)
     income = np.exp(rng.normal(11.0, 0.45, size=n)) * (1 + 0.08 * post_drift)
+    employment = rng.choice(EMPLOYMENT, size=n, p=[0.55, 0.25, 0.12, 0.06, 0.02])
+    housing = rng.choice(HOUSING, size=n, p=[0.15, 0.35, 0.45, 0.05])
+    # Latent cash-flow traits (observed only through bank transactions); some drive the hazard below
+    lat = cf.latent_traits(rng, n, employment, housing, race, bureau, dti, income, cf_cfg)
     loan_amount = np.clip(np.round(np.exp(rng.normal(9.3, 0.6, size=n)), -2), 1000, 60000)
     term = rng.choice(np.array([36, 60]), size=n, p=[0.65, 0.35])
 
@@ -127,6 +140,7 @@ def _applications(
         + CAUSAL["pmt_to_income"] * (pti - 0.08)
         + 0.35 * thin_file
         + 0.35 * (channel == "partner_api")
+        + cf.cashflow_risk(lat)  # PLANTED cash-flow signal
         + rng.normal(0, 0.35, size=n)
     )
 
@@ -142,9 +156,9 @@ def _applications(
             "zip3": zip3,
             "geo_affluence_idx": geo_affluence_idx.round(2),
             "employer_id": np.array([f"E{int(x):05d}" for x in np.minimum(rng.zipf(1.3, size=n), 99999)]),
-            "employment_type": rng.choice(EMPLOYMENT, size=n, p=[0.55, 0.25, 0.12, 0.06, 0.02]),
+            "employment_type": employment,
             "employment_years": np.clip(rng.exponential(6, size=n), 0, 45).round(1),
-            "housing_status": rng.choice(HOUSING, size=n, p=[0.15, 0.35, 0.45, 0.05]),
+            "housing_status": housing,
             "purpose": rng.choice(PURPOSE, size=n),
             "annual_income": income.round(0),
             "loan_amount": loan_amount,
@@ -208,7 +222,8 @@ def _applications(
             "age_62_plus": np.where(age >= 62, "true", "false"),
         }
     )
-    return df, risk, protected
+    lat.insert(0, "application_id", df["application_id"].to_numpy())
+    return df, risk, protected, lat
 
 
 def _simulate_performance(
@@ -381,7 +396,8 @@ def generate(cfg: dict[str, Any], n_applications: int | None = None, seed: int |
     as_of = pd.Period(cfg["as_of_month"], "M")
     drift_start = pd.Period(cfg["drift_start_month"], "M")
 
-    apps, risk, protected = _applications(rng, n, months, drift_start, int(cfg["n_noise_numeric"]), "A")
+    cf_cfg = cfg["cashflow"]
+    apps, risk, protected, lat = _applications(rng, n, months, drift_start, int(cfg["n_noise_numeric"]), "A", cf_cfg)
 
     # Legacy policy: approve best `approval_rate` by legacy score within each month
     rank = apps.groupby("origination_month")["legacy_score"].rank(pct=True, ascending=False)
@@ -403,19 +419,42 @@ def generate(cfg: dict[str, Any], n_applications: int | None = None, seed: int |
     apps.loc[approved, "acct_review_flag"] = review.astype(float)
     apps.loc[approved, "acct_review_ts"] = review_ts.to_numpy()
 
+    # PLANTED CASH-FLOW LEAK: a vendor "cash-flow risk score" refreshed 45-120 days AFTER the decision; for funded
+    # loans the refresh already reflects early post-funding delinquency. Lineage says "unknown" (vendor feed).
+    early_dq = np.zeros(n)
+    early_dq[np.where(approved)[0]] = ((f30 > 0) & (f30 <= 3)).astype(float)
+    vendor_logit = 0.6 * (risk - risk.mean()) + 1.8 * early_dq + rng.normal(0, 0.4, n)
+    apps["cf_vendor_risk_score"] = np.round(300 + 600 * _sigmoid(-vendor_logit))
+    apps["cf_vendor_risk_score_ts"] = apps["decision_ts"] + pd.to_timedelta(rng.integers(45, 121, n), unit="D")
+
+    # Bank statements: months before the decision for everyone; funded loans also keep a post-decision feed
+    months_before = int(cf_cfg["months_history"])
+    post = np.where(approved, int(cf_cfg["post_decision_months"]), 0)
+    tx = cf.simulate_transactions(rng, apps["application_id"].to_numpy(), apps["decision_ts"], lat, months_before, post)
+
     lineage = _lineage(apps.columns)
 
     # Post-as-of applications for shadow scoring (no performance)
     new_months = [as_of + 1 + i for i in range(3)]
-    new_apps, _, _ = _applications(
+    new_apps, _, _, new_lat = _applications(
         np.random.default_rng(seed + 1),
         int(cfg["n_new_applications"]),
         new_months,
         drift_start,
         int(cfg["n_noise_numeric"]),
         "N",
+        cf_cfg,
     )
     new_apps = new_apps.drop(columns=PII_COLUMNS)
+    tx_new = cf.simulate_transactions(
+        np.random.default_rng(seed + 2),
+        new_apps["application_id"].to_numpy(),
+        new_apps["decision_ts"],
+        new_lat,
+        months_before,
+        np.zeros(len(new_apps)),
+    )
+    tx = pd.concat([tx, tx_new], ignore_index=True)
 
     gt = {
         "seed": seed,
@@ -425,9 +464,33 @@ def generate(cfg: dict[str, Any], n_applications: int | None = None, seed: int |
         "correlated_redundant_features": [
             f"bur_attr_{j + 1:03d}" for j in range(int(cfg["n_noise_numeric"])) if j % 10 < 3
         ],
-        "leakage_columns": ["acct_review_flag"],
-        "leakage_timestamp_columns": {"acct_review_flag": "acct_review_ts"},
-        "proxy_features": {"geo_affluence_idx": "race_ethnicity"},
+        "leakage_columns": ["acct_review_flag", "cf_vendor_risk_score"],
+        "leakage_timestamp_columns": {
+            "acct_review_flag": "acct_review_ts",
+            "cf_vendor_risk_score": "cf_vendor_risk_score_ts",
+        },
+        "proxy_features": {"geo_affluence_idx": "race_ethnicity", "cf_remittance_share_6m": "race_ethnicity"},
+        "cashflow": {
+            "causal_latents": {
+                "income_cv": 1.4,
+                "log_buffer_months": -0.30,
+                "spend_pressure": 1.2,
+                "rent_late_p": 2.0,
+                "overstated_income": 0.45,
+            },
+            "observable_signal_features": [
+                "cf_income_cv_6m",
+                "cf_min_balance_6m",
+                "cf_avg_balance_6m",
+                "cf_expense_to_income_6m",
+                "cf_nsf_count_6m",
+                "cf_housing_on_time_share_6m",
+                "cf_verified_to_stated_income",
+            ],
+            "not_causal": ["cf_gambling_share_6m", "cf_remittance_share_6m"],
+            "post_decision_rows_in_raw": int((tx["days_before_decision"] < 1).sum()),
+            "n_transactions": int(len(tx)),
+        },
         "protected_columns": PROTECTED_COLUMNS,
         "pii_columns": PII_COLUMNS,
         "drift": {
@@ -448,7 +511,7 @@ def generate(cfg: dict[str, Any], n_applications: int | None = None, seed: int |
         "approval_rate": float(approved.mean()),
         "as_of_month": cfg["as_of_month"],
     }
-    return SynthData(apps, perf, protected, lineage, new_apps, gt)
+    return SynthData(apps, perf, protected, lineage, new_apps, gt, transactions=tx)
 
 
 def _lineage(columns: pd.Index) -> pd.DataFrame:
@@ -482,17 +545,20 @@ def _lineage(columns: pd.Index) -> pd.DataFrame:
         "pricing": ["interest_rate", "scheduled_payment", "pmt_to_income", "legacy_score"],
         "geo_vendor": ["geo_affluence_idx"],
         "crm": ["acct_review_flag", "acct_review_ts"],  # deliberately vague lineage (the leak)
+        "cashflow_vendor": ["cf_vendor_risk_score", "cf_vendor_risk_score_ts"],  # vendor feed; also vague (leak)
+        "bank_statements": list(cf.CASHFLOW_FEATURES),  # derived from pre-decision transactions
     }
+    columns = list(columns) + [c for c in cf.CASHFLOW_FEATURES if c not in columns]
     rows = []
     for c in columns:
         source = next((k for k, v in src.items() if c in v), "bureau" if c.startswith("bur_attr_") else "application")
-        available = "unknown" if source == "crm" else "decision"
+        available = "unknown" if source in ("crm", "cashflow_vendor") else "decision"
         rows.append(
             {
                 "column_name": c,
                 "source_system": source,
                 "available_at": available,
-                "description": _DESCRIPTIONS.get(c, f"{source} attribute {c}"),
+                "description": _DESCRIPTIONS.get(c) or cf.CASHFLOW_DESCRIPTIONS.get(c, f"{source} attribute {c}"),
             }
         )
     return pd.DataFrame(rows)
@@ -508,4 +574,5 @@ _DESCRIPTIONS = {
     "acct_review_flag": "Account review indicator from CRM",
     "legacy_score": "Current production policy score",
     "employer_id": "Normalized employer identifier (high cardinality)",
+    "cf_vendor_risk_score": "Third-party cash-flow risk score (vendor feed)",
 }

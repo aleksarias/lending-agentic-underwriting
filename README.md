@@ -31,6 +31,7 @@ Development uses **fully synthetic data**. This repository is engineering scaffo
 | Platform-enforced isolation | three service principals with Unity Catalog grants; agents cannot read the holdout, raw data, protected attributes, all-version labels or `ops` |
 | Human-gated promotion | holdout gate → your recorded approval → a separate promoter identity registers the champion |
 | Operations | shadow scoring, drift/outcome monitoring, cost guardrails, full audit trail, one-command teardown |
+| Rich synthetic data (v2) | applications + bureau + **6 months of bank-statement transactions** per applicant, with planted cash-flow signal, leak and proxy ([docs/synthetic-data.md](docs/synthetic-data.md)) |
 
 ## Architecture
 
@@ -142,8 +143,8 @@ and under which definition.
 
 | Schema | Contents | harness SP | agent SP | promoter SP |
 |---|---|---|---|---|
-| `raw` | applications (with synthetic PII), monthly performance, protected attributes, lineage | read | — | — |
-| `curated` | applications (no PII/protected), `applications_dev` view (pre-holdout period), data catalog | all | **views only** | — |
+| `raw` | applications (with synthetic PII), monthly performance, **bank transactions**, protected attributes, lineage | read | — | — |
+| `curated` | applications (no PII/protected) with `cf_*` cash-flow features, `cashflow_monthly` (pre-decision only), `applications_dev` and `cashflow_monthly_dev` views (pre-holdout period), data catalog | all | **views only** | — |
 | `labels` | `labels_all` (every version), splits, `labels_active` view (**active definition, train split only**) | all | **`labels_active` only** | — |
 | `feature_registry` | engineered features + per-version performance | all | read/write | — |
 | `experiments` | agent reports, profiler flags, candidate models | all | read/write | read |
@@ -160,7 +161,8 @@ protected by a token that only the promotion gate can mint, and has a per-defini
 For a candidate on the **validation** split: AUC, KS, Brier, log loss, ECE, calibration slope/intercept, lift by
 decile, AUC by time slice and segment (channel, product, thin-file, employment), score PSI, thin-file AUC, leakage
 (timestamp-after-decision, suspicious single-feature AUC, target-derived lineage, target-like names), adverse impact
-ratios by protected class on the through-the-door population, proxy detection, and adverse-action reason codes
+ratios by protected class on the through-the-door population, proxy detection (pooled and per protected group vs
+the reference group), and adverse-action reason codes
 (TreeSHAP / linear contributions). It compares only against the champion **of the same definition version**
 (otherwise the version's baseline) and requires
 
@@ -287,23 +289,48 @@ make teardown                             # remove everything the project create
 | Command | What it does |
 |---|---|
 | `lau init [--dry-run]` | catalog, schemas, landing volumes, 2X-Small warehouse, 3 SPs, grants, MLflow experiment |
-| `lau check-access` | verifies each identity; proves the agent SP is denied on the holdout |
+| `lau check-access` | verifies each identity, then probes isolation as agent, ui and promoter (results in `ops.access_checks`) |
 | `lau gen-data [--n N --seed S]` | synthetic raw data; ground truth to `.lau/ground_truth.json` (never shown to agents) |
 | `lau default-definition plan [--approve]` | diff + impact; `--approve` records approval of that exact hash (for the job path) |
 | `lau default-definition apply [--yes] [--no-cycle]` | activate and rebuild downstream |
 | `lau default-definition compare other.yaml` | build another definition side by side and compare |
 | `lau profile` / `lau run-cycle` | profiler only / full improvement cycle |
+| `lau stop-cycle <cycle_id> --reason …` | ask a running cycle to stop before its next agent run (recorded as stopped_by_user) |
 | `lau evaluate <mv>` | harness evaluation on validation (no holdout) |
 | `lau promote <mv>` | gate → approval → promotion |
 | `lau shadow` / `lau monitor` | shadow scoring / drift and outcome monitoring |
 | `lau status` / `lau cost` | system status / actual DBUs from `system.billing.usage` + logged spend |
+| `lau evidence run [--only step]` | benchmark ledger, definition sensitivity, vintages, cash-flow cohorts, proxy scan, registry mirror, verdict |
+| `lau versions show` / `record` | version ledger for thresholds, budgets, models, benchmarks, grants, prompts and code |
+| `lau console [--port] [--actions]` | the Underwriting Console (API + web app); human actions only with `--actions` |
 | `lau teardown` | remove all project resources (restores an adopted warehouse) |
 
 ### Scheduled jobs (Asset Bundle, `databricks.yml`)
 
 `lau-definition-sync` (applies a changed definition only with a recorded approval), `lau-shadow-scoring`,
-`lau-monitoring`, `lau-improvement-cycle` (runs when `ops.cycle_queue` has work). All run on serverless compute as
+`lau-monitoring`, `lau-evidence` (recomputes the benchmark ledger and verdict the console shows), `lau-improvement-cycle` (runs when `ops.cycle_queue` has work). All run on serverless compute as
 the harness service principal and are deployed **paused**. Targets: `dev` (this workspace) and `prod` (placeholder).
+
+## Underwriting Console (web UI)
+
+A read-only web console over the same tables: what the system is doing now, what it did (a timeline of definitions,
+data loads, cycles, evaluations, gates, approvals and alerts), what it will do next, and whether it is improving. The
+improvement evidence comes from `lau evidence run`, which re-scores every model and the frozen legacy score on the same
+loans under frozen 30, 60 and 90 DPD benchmark definitions with paired bootstrap intervals, then records a verdict. The
+console reads only through a dedicated read-only role, marks agent claims apart from harness measurements, and shows
+designed "not available yet" states for the parts that do not exist (real-time decision API, live loan-status feed,
+staged rollouts). Human actions (holdout gate, approve, promote, stop a cycle, acknowledge an alert) are disabled
+unless `lau console --actions`.
+
+```bash
+uv run python scripts/export_console_fixture.py --out .local_lake/console_fixture
+```
+
+```bash
+LAU_ENV_FILE=/dev/null LAU_BACKEND=local LAU_LOCAL_LAKE=.local_lake/console_fixture uv run lau console
+```
+
+Details, architecture and tests: [docs/console/README.md](docs/console/README.md). Design: [docs/console/design-intent.md](docs/console/design-intent.md). API contract: [docs/console/contract.md](docs/console/contract.md).
 
 ## Configuration
 
@@ -321,14 +348,15 @@ the harness service principal and are deployed **paused**. Targets: `dev` (this 
 ## Testing
 
 ```bash
-make test               # 57 offline unit tests on a local DuckDB lake (no network)
-make test-integration   # 13 tests against the live workspace
+make test               # 62 offline unit tests on a local DuckDB lake (no network)
+make test-integration   # 16 tests against the live workspace
 ```
 
 Unit tests cover the brief's definition tests (a)–(e): every field change changes the hash and invalidates exactly
 the dependent stages; an unchanged definition triggers nothing; no stage reads a label not tagged with the active
 version; 60 vs 90 DPD produce different labels (monotone); an old champion is never compared with a challenger from
-another definition. They also cover planted-leak and proxy detection, holdout isolation, SQL sandboxes, masking,
+another definition. They also cover planted-leak and proxy detection, holdout isolation, the cash-flow
+anti-leakage guard (post-decision transactions never reach features), SQL sandboxes, masking,
 agent lockdown, and a secret scan. Integration tests prove Unity Catalog itself denies the agent principal (the
 queries bypass the in-process access checks).
 

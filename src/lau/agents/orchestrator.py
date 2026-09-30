@@ -11,11 +11,19 @@ Cycle:
   7. challenger alias set if validation passed and no fail/block  (NOT promoted; human runs `lau promote`)
   8. curator      -> LESSONS.md
   9. cycle report + trace flush + cost log
+
+Live visibility for the console (best effort: none of it can break a cycle):
+  * config/prompt/grants/code versions are recorded to `ops.config_versions` when they changed since last time
+  * `ops.cycle_heartbeat` gets a row at start, before and after every agent run, and at the end
+  * the trace is flushed after every agent run, not only at the end
+  * before each agent run `ops.cycle_control` is checked for a stop request (`lau stop-cycle`, console); if there is
+    one the cycle ends gracefully as `stopped_by_user` (an agent run in progress always finishes first)
 """
 
 from __future__ import annotations
 
 import asyncio
+import getpass
 import json
 import time
 import uuid
@@ -23,7 +31,7 @@ from datetime import UTC, datetime
 
 import pandas as pd
 
-from lau import cost
+from lau import cost, versioning
 from lau.agents import lessons as lessons_mod
 from lau.agents.runner import AgentRunError, CycleContext, run_agent
 from lau.agents.tools import role_tools as rt
@@ -39,6 +47,107 @@ from lau.trace import TraceWriter
 
 class CyclePreconditionError(RuntimeError):
     pass
+
+
+class CycleStoppedByUser(Exception):
+    """A human asked for this cycle to end. Raised between agent runs, never inside one."""
+
+    def __init__(self, reason: str, requested_by: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.requested_by = requested_by
+
+
+def request_stop(cycle_id: str, reason: str = "", requested_by: str | None = None) -> None:
+    """Ask a running cycle to stop gracefully before its next agent run (`ops.cycle_control`, harness identity)."""
+    get_store("harness").write_df(
+        "ops",
+        "cycle_control",
+        _control_row(cycle_id, requested_by or getpass.getuser(), reason, "requested"),
+        mode="append",
+    )
+
+
+def _control_row(cycle_id: str, requested_by: str, reason: str, status: str) -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {
+                "ts": datetime.now(UTC),
+                "cycle_id": cycle_id,
+                "action": "stop",
+                "requested_by": requested_by,
+                "reason": reason,
+                "status": status,
+            }
+        ]
+    )
+
+
+def _text(v) -> str:
+    return "" if pd.isna(v) else str(v)
+
+
+def _pending_stop(ctx: CycleContext, log=print) -> CycleStoppedByUser | None:
+    """The earliest stop request for this cycle, or None. A table that can't be read means "keep going"."""
+    try:
+        st = get_store("harness")
+        if not st.table_exists("ops", "cycle_control"):
+            return None
+        cid = ctx.cycle_id.replace("'", "''")
+        df = st.query(
+            f"SELECT ts, requested_by, reason FROM {st.fq('ops', 'cycle_control')} "
+            f"WHERE cycle_id = '{cid}' AND action = 'stop' AND status = 'requested' ORDER BY ts"
+        )
+    except Exception as e:  # noqa: BLE001 - a failing check must not stop (or break) the cycle
+        log(f"warning: could not read ops.cycle_control ({type(e).__name__}: {e}); continuing")
+        return None
+    if df.empty:
+        return None
+    first = df.iloc[0]
+    by = _text(first["requested_by"]) or "unknown"
+    return CycleStoppedByUser(_text(first["reason"]) or f"stop requested by {by}", by)
+
+
+def _heartbeat(ctx: CycleContext, step: str, state: str, agent: str | None = None, log=print) -> None:
+    """Append a liveness row to `ops.cycle_heartbeat`. Telemetry only: a failure is logged, never raised."""
+    try:
+        row = {
+            "ts": datetime.now(UTC),
+            "cycle_id": ctx.cycle_id,
+            "step": step,
+            "agent": agent,
+            "state": state,
+            "experiments_used": int(ctx.experiments_used),
+            "spent_usd": float(ctx.spent_usd),
+        }
+        df = pd.DataFrame([row]).astype({"experiments_used": "int32"})  # INT in the console contract
+        get_store("harness").write_df("ops", "cycle_heartbeat", df, mode="append")
+    except Exception as e:  # noqa: BLE001 - liveness telemetry must never break a cycle
+        log(f"warning: heartbeat write failed ({step}/{state}): {type(e).__name__}: {e}")
+
+
+def _flush_trace(ctx: CycleContext, log=print) -> None:
+    try:
+        ctx.trace.flush()
+    except Exception as e:  # noqa: BLE001 - the rows stay buffered and go out with the next flush
+        log(f"warning: trace flush failed ({type(e).__name__}: {e}); rows kept for the next flush")
+
+
+async def _agent_run(role: str, prompt: str, tools: list, ctx: CycleContext, log=print):
+    """`run_agent` plus live visibility: stop check first, heartbeats around the run, trace flushed after it."""
+    stop = _pending_stop(ctx, log)
+    if stop is not None:
+        raise stop
+    _heartbeat(ctx, role, "running", role, log)
+    try:
+        r = await run_agent(role, prompt, tools, ctx)
+    except BaseException:  # noqa: BLE001 - recorded, then re-raised for run_cycle to classify
+        _heartbeat(ctx, role, "error", role, log)
+        _flush_trace(ctx, log)
+        raise
+    _heartbeat(ctx, role, "error" if r.is_error else "done", role, log)
+    _flush_trace(ctx, log)
+    return r
 
 
 def _status(ctx: CycleContext) -> dict:
@@ -97,6 +206,8 @@ async def run_cycle(reason: str = "manual", log=print) -> dict:
     ctx = CycleContext(cycle_id=cycle_id, version=version, trace=TraceWriter(cycle_id, version))
     st = get_store("harness")
     log(f"cycle {cycle_id} under definition {version} ({reason})\n{est.render()}")
+    # Before `started_at` is taken, so the ledger as of the cycle's start includes what this cycle runs with.
+    versioning.try_record_config_versions(f"cycle {cycle_id}", log=log)
     st.write_df(
         "ops",
         "cycles",
@@ -114,10 +225,17 @@ async def run_cycle(reason: str = "manual", log=print) -> dict:
         ),
         mode="append",
     )
+    _heartbeat(ctx, "start", "running", log=log)
     outcome: dict = {"cycle_id": cycle_id, "definition_version": version, "steps": []}
     status = "completed"
+    stop: CycleStoppedByUser | None = None
     try:
         await _run_steps(ctx, outcome, log)
+    except CycleStoppedByUser as e:
+        stop = e
+        status = "stopped_by_user"
+        outcome["stop_reason"] = e.reason
+        log(f"cycle stopped by {e.requested_by}: {e.reason}")
     except AgentRunError as e:
         status = "failed_agent_api"
         outcome["stop_reason"] = str(e)
@@ -126,38 +244,57 @@ async def run_cycle(reason: str = "manual", log=print) -> dict:
         status = "stopped_budget"
         outcome["stop_reason"] = str(e)
         log(f"cycle stopped: {e}")
+    except (KeyboardInterrupt, asyncio.CancelledError) as e:
+        status = "failed"  # never leave an interrupted cycle recorded as "completed"
+        outcome["stop_reason"] = f"interrupted ({type(e).__name__})"
+        log("cycle interrupted")
+        raise
     except Exception as e:  # noqa: BLE001 - record and re-raise after writing the report
         status = "failed"
         outcome["stop_reason"] = f"{type(e).__name__}: {e}"
         log(f"cycle failed: {e}")
     finally:
-        outcome.update(
-            {
-                "status": status,
-                "anthropic_usd": round(ctx.spent_usd, 4),
-                "per_agent": ctx.per_agent,
-                "experiments_used": ctx.experiments_used,
-                "features_proposed": ctx.features_proposed,
-                "wall_clock_s": round(time.time() - ctx.started, 1),
-            }
-        )
-        report_path = _write_cycle_report(ctx, outcome)
-        outcome["report"] = str(report_path)
-        ctx.trace.flush()
-        cost.log_cost("anthropic", ctx.spent_usd, cycle_id=cycle_id, details="agent runs")
-        dbu, usd = cost.metered_warehouse_usd()
-        if usd:
-            cost.log_cost("databricks_metered", usd, cycle_id=cycle_id, dbu=dbu)
-        st.execute(
-            f"UPDATE {st.fq('ops', 'cycles')} SET status = '{status}', "
-            f"summary_json = '{json.dumps(_brief(outcome)).replace(chr(39), chr(39) * 2)}' "
-            f"WHERE cycle_id = '{cycle_id}'"
-        )
-        if st.table_exists("ops", "cycle_queue"):
-            st.execute(
-                f"UPDATE {st.fq('ops', 'cycle_queue')} SET status = 'done' "
-                f"WHERE definition_version = '{version}' AND status = 'queued'"
+        try:
+            outcome.update(
+                {
+                    "status": status,
+                    "anthropic_usd": round(ctx.spent_usd, 4),
+                    "per_agent": ctx.per_agent,
+                    "experiments_used": ctx.experiments_used,
+                    "features_proposed": ctx.features_proposed,
+                    "wall_clock_s": round(time.time() - ctx.started, 1),
+                }
             )
+            report_path = _write_cycle_report(ctx, outcome)
+            outcome["report"] = str(report_path)
+            ctx.trace.flush()
+            cost.log_cost("anthropic", ctx.spent_usd, cycle_id=cycle_id, details="agent runs")
+            dbu, usd = cost.metered_warehouse_usd()
+            if usd:
+                cost.log_cost("databricks_metered", usd, cycle_id=cycle_id, dbu=dbu)
+            st.execute(
+                f"UPDATE {st.fq('ops', 'cycles')} SET status = '{status}', "
+                f"summary_json = '{json.dumps(_brief(outcome)).replace(chr(39), chr(39) * 2)}' "
+                f"WHERE cycle_id = '{cycle_id}'"
+            )
+            if st.table_exists("ops", "cycle_queue"):
+                st.execute(
+                    f"UPDATE {st.fq('ops', 'cycle_queue')} SET status = 'done' "
+                    f"WHERE definition_version = '{version}' AND status = 'queued'"
+                )
+        finally:
+            # Last, so the console never sees "end" while ops.cycles still says running; always written.
+            if stop is not None:
+                try:
+                    st.write_df(
+                        "ops",
+                        "cycle_control",
+                        _control_row(cycle_id, stop.requested_by, stop.reason, "honored"),
+                        mode="append",
+                    )
+                except Exception as e:  # noqa: BLE001 - the cycle has ended either way
+                    log(f"warning: could not record the honored stop request ({type(e).__name__}: {e})")
+            _heartbeat(ctx, "end", status, log=log)
     return outcome
 
 
@@ -180,8 +317,11 @@ def _brief(o: dict) -> dict:
 async def _run_steps(ctx: CycleContext, outcome: dict, log) -> None:
     b = ctx.budgets["cycle"]
 
+    async def run(role: str, prompt: str, tools: list):
+        return await _agent_run(role, prompt, tools, ctx, log)
+
     # 1. plan
-    r = await run_agent("planner", "Plan this improvement cycle.", rt.planner_tools(ctx, lambda: _status(ctx)), ctx)
+    r = await run("planner", "Plan this improvement cycle.", rt.planner_tools(ctx, lambda: _status(ctx)))
     plan = ctx.state.get("plan") or {
         "goals": ["improve on baseline"],
         "feature_hypotheses": [],
@@ -196,19 +336,18 @@ async def _run_steps(ctx: CycleContext, outcome: dict, log) -> None:
 
     # 2. profile
     if plan.get("run_profiler", True):
-        r = await run_agent(
-            "profiler", "Profile the data for the active definition and write your report.", rt.profiler_tools(ctx), ctx
+        r = await run(
+            "profiler", "Profile the data for the active definition and write your report.", rt.profiler_tools(ctx)
         )
         outcome["steps"].append(_step(r))
 
     # 3. features
     hyp = "\n".join(f"- {h}" for h in plan.get("feature_hypotheses", [])) or "- (none given; use your judgement)"
-    r = await run_agent(
+    r = await run(
         "feature",
         f"Plan goals: {plan['goals']}\nFeature hypotheses to test:\n{hyp}\n"
         f"Propose at most {b['max_features_proposed']} features.",
         rt.feature_tools(ctx),
-        ctx,
     )
     outcome["steps"].append(_step(r))
 
@@ -218,13 +357,13 @@ async def _run_steps(ctx: CycleContext, outcome: dict, log) -> None:
         f"Plan goals: {plan['goals']}. Model types to try: {plan['model_types']}. You may run at most {n_exp} "
         f"harness evaluations this cycle. New engineered features this cycle: {ctx.state.get('features', [])}."
     )
-    r = await run_agent("modeling", task, rt.modeling_tools(ctx), ctx)
+    r = await run("modeling", task, rt.modeling_tools(ctx))
     outcome["steps"].append(_step(r))
     rounds = 0
     verdict = None
     while ctx.state.get("proposed_challenger"):
         mv = ctx.state["proposed_challenger"]
-        r = await run_agent("redteam", f"Red-team candidate model_version {mv}.", rt.redteam_tools(ctx), ctx)
+        r = await run("redteam", f"Red-team candidate model_version {mv}.", rt.redteam_tools(ctx))
         outcome["steps"].append(_step(r))
         verdict = _latest_verdict(ctx, "redteam", mv)
         if verdict != "fail" or rounds >= b["max_critique_rounds"]:
@@ -232,13 +371,12 @@ async def _run_steps(ctx: CycleContext, outcome: dict, log) -> None:
         rounds += 1
         findings = _report_body(ctx, "redteam", mv)
         ctx.state.pop("proposed_challenger", None)
-        r = await run_agent(
+        r = await run(
             "modeling",
             f"Your candidate {mv} FAILED red-team review (round {rounds}). Findings:\n"
             f"{findings[:6000]}\nRevise: train and evaluate a fixed candidate and propose it. "
             f"Remaining evaluation budget this cycle: {b['max_experiments'] - ctx.experiments_used}.",
             rt.modeling_tools(ctx),
-            ctx,
         )
         outcome["steps"].append(_step(r))
         if not ctx.state.get("proposed_challenger"):
@@ -250,7 +388,7 @@ async def _run_steps(ctx: CycleContext, outcome: dict, log) -> None:
 
     # 6. compliance
     if mv:
-        r = await run_agent("compliance", f"Review candidate model_version {mv}.", rt.compliance_tools(ctx), ctx)
+        r = await run("compliance", f"Review candidate model_version {mv}.", rt.compliance_tools(ctx))
         outcome["steps"].append(_step(r))
         outcome["compliance_verdict"] = _latest_verdict(ctx, "compliance", mv)
         ev = latest_evaluation(get_store("harness"), f"candidate:{mv}")
@@ -265,7 +403,7 @@ async def _run_steps(ctx: CycleContext, outcome: dict, log) -> None:
             outcome["next_step"] = "Challenger not eligible for promotion this cycle (see checks/verdicts)."
 
     # 8. curate
-    r = await run_agent("curator", "Distil this cycle into lessons.", rt.curator_tools(ctx), ctx)
+    r = await run("curator", "Distil this cycle into lessons.", rt.curator_tools(ctx))
     outcome["steps"].append(_step(r))
 
 

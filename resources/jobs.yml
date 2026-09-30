@@ -46,6 +46,26 @@ resources:
             parameters: ["shadow"]
       timeout_seconds: 1800
 
+    lau_evidence:
+      name: lau-evidence
+      run_as:
+        service_principal_name: ${var.harness_sp}
+      trigger:
+        periodic: {interval: 1, unit: DAYS}
+      environments:
+        - environment_key: lau
+          spec:
+            environment_version: ${var.environment_version}
+            dependencies: ["../dist/*.whl"]
+      tasks:
+        - task_key: evidence
+          environment_key: lau
+          python_wheel_task:
+            package_name: lending_agentic_underwriting
+            entry_point: lau-job
+            parameters: ["evidence"]
+      timeout_seconds: 1800
+
     lau_monitoring:
       name: lau-monitoring
       run_as:

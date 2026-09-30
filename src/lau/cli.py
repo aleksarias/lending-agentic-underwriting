@@ -21,6 +21,19 @@ from rich.table import Table  # noqa: E402
 app = typer.Typer(no_args_is_help=True, add_completion=False, help=__doc__)
 dd = typer.Typer(no_args_is_help=True, help="Default-definition lifecycle (plan | apply | compare).")
 app.add_typer(dd, name="default-definition")
+
+
+def _mount_evidence() -> None:
+    from lau.evidence.cli import app as evidence_app
+
+    app.add_typer(evidence_app, name="evidence")
+
+
+_mount_evidence()
+versions = typer.Typer(
+    no_args_is_help=True, help="Version ledger for config, prompts, grants and code (show | record)."
+)
+app.add_typer(versions, name="versions")
 console = Console()
 
 
@@ -45,15 +58,19 @@ def _guard(fn, *a, **kw):
 # ---------------------------------------------------------------------------------------------------------
 @app.command("check-access")
 def check_access() -> None:
-    """Read-only: verify each identity and the platform-level isolation (agent denied on holdout)."""
+    """Verify each identity, then probe isolation as agent, ui and promoter; results go to ops.access_checks.
+
+    Exits 1 if any probe is not as expected (a read that should be denied, a denial that should be a read, or a
+    probe that could not tell).
+    """
     from databricks.sdk import WorkspaceClient
+    from rich.markup import escape
 
     from lau.credentials import databricks_config, has_role_credentials
-    from lau.settings import get_settings
+    from lau.governance.access_checks import record_access_checks, run_access_checks
 
-    s = get_settings()
     t = Table("role", "identity", "status")
-    for role in ("admin", "harness", "agent", "promoter"):
+    for role in ("admin", "harness", "agent", "promoter", "ui"):
         if not has_role_credentials(role):
             t.add_row(role, "-", "no credentials in .env" + (" (run `lau init`)" if role != "admin" else ""))
             continue
@@ -63,21 +80,24 @@ def check_access() -> None:
         except Exception as e:  # noqa: BLE001
             t.add_row(role, "-", f"error: {str(e)[:80]}")
     console.print(t)
-    if s.project.backend == "databricks" and s.state.warehouse_id and has_role_credentials("agent"):
-        from lau.store import DatabricksStore
-
-        st = DatabricksStore("agent", s)
-        try:
-            st._query(f"SELECT * FROM {s.fq('holdout', 'oot_labels')} LIMIT 1")
-            console.print("[red]✗ agent principal CAN read holdout — isolation broken[/red]")
-        except Exception as e:  # noqa: BLE001
-            ok = any(k in str(e) for k in ("PERMISSION_DENIED", "INSUFFICIENT_PERMISSIONS", "does not have"))
-            console.print(
-                "[green]✓[/green] agent denied on holdout by Unity Catalog"
-                if ok
-                else f"[yellow]? agent holdout query failed for another reason: {str(e)[:160]}[/yellow]"
-            )
-        st.close()
+    rows = _guard(run_access_checks, False)
+    if not rows:
+        _log("no access probes ran (workspace not initialised, or no role credentials in .env)")
+        return
+    pt = Table("role", "object", "expected", "observed", "result")
+    for r in rows:
+        result = "[green]ok[/green]" if r["ok"] else f"[red]FAIL[/red] {escape(r['detail'][:70])}"
+        pt.add_row(r["role"], r["object"], r["expected"], r["observed"], result)
+    console.print(pt)
+    try:
+        record_access_checks(rows)
+    except Exception as e:  # noqa: BLE001
+        console.print(f"[yellow]? results not recorded in ops.access_checks: {escape(str(e)[:160])}[/yellow]")
+    failed = [r for r in rows if not r["ok"]]
+    if failed:
+        console.print(f"[red]✗ {len(failed)} of {len(rows)} access checks failed[/red]")
+        raise typer.Exit(1)
+    console.print(f"[green]✓[/green] all {len(rows)} access checks ok ({', '.join(sorted({r['role'] for r in rows}))})")
 
 
 @app.command()
@@ -166,6 +186,38 @@ def dd_compare(other: Path = typer.Argument(..., help="YAML of the other definit
 
 
 # ---------------------------------------------------------------------------------------------------------
+@versions.command("show")
+def versions_show() -> None:
+    """Current hash of every versioned component vs the latest one recorded in ops.config_versions."""
+    from lau import versioning
+
+    rows = _guard(versioning.compare)
+    t = Table("component", "current", "recorded", "state", "recorded at (UTC)")
+    color = {"same": "green", "changed": "yellow", "new": "yellow"}
+    for r in rows:
+        at = "-" if r["recorded_at"] is None else str(r["recorded_at"])[:19]
+        t.add_row(r["component"], r["current"], r["recorded"] or "-", f"[{color[r['state']]}]{r['state']}[/]", at)
+    console.print(t)
+    pending = [r["component"] for r in rows if r["state"] != "same"]
+    _log(
+        f"{len(pending)} component(s) differ from the last recorded version"
+        + ("; `lau versions record` appends them." if pending else ".")
+    )
+
+
+@versions.command("record")
+def versions_record(reason: str = typer.Option("manual", "--reason", help="why this snapshot is taken")) -> None:
+    """Append a row for every component whose hash changed since it was last recorded."""
+    import getpass
+
+    from lau import versioning
+
+    pending = [r["component"] for r in _guard(versioning.compare) if r["state"] != "same"]
+    n = _guard(versioning.record_config_versions, reason, getpass.getuser())
+    _log(f"recorded {n} component(s): {', '.join(pending)}" if n else "nothing changed since the last record")
+
+
+# ---------------------------------------------------------------------------------------------------------
 @app.command()
 def profile() -> None:
     """Run only the data-profiler agent against the active definition."""
@@ -184,6 +236,32 @@ def run_cycle(reason: str = "manual") -> None:
 
     res = _guard(run_cycle_sync, reason, _log)
     _log(json.dumps({k: v for k, v in res.items() if k not in ("steps",)}, indent=1, default=str)[:6000])
+
+
+@app.command("stop-cycle")
+def stop_cycle(
+    cycle_id: str = typer.Argument(..., help="cycle to stop, e.g. cy-202609301450-2e0e (see `lau status`)"),
+    reason: str = typer.Option("", "--reason", help="why; recorded with the request and shown in the console"),
+) -> None:
+    """Ask a running cycle to end gracefully before its next agent run (it finishes as stopped_by_user)."""
+    import getpass
+
+    from lau.agents.orchestrator import request_stop
+    from lau.store import get_store
+
+    st = get_store("harness")
+    cid = cycle_id.replace("'", "''")
+    cyc = (
+        st.query(f"SELECT status FROM {st.fq('ops', 'cycles')} WHERE cycle_id = '{cid}'")
+        if st.table_exists("ops", "cycles")
+        else None
+    )
+    if cyc is None or cyc.empty:
+        _fail(f"unknown cycle {cycle_id} (see `lau status`)")
+    elif str(cyc["status"].iloc[0]) != "running":
+        _fail(f"cycle {cycle_id} is not running (status: {cyc['status'].iloc[0]})")
+    _guard(request_stop, cycle_id, reason, getpass.getuser())
+    _log(f"stop requested for {cycle_id}: it ends before its next agent run (a run in progress finishes first)")
 
 
 @app.command()
@@ -319,6 +397,22 @@ def cost_cmd(days: int = 7) -> None:
 
     _log(cost.billing_actuals(days).to_string(index=False) or "(no billing rows yet)")
     _log(f"month-to-date logged: ${cost.month_to_date_usd():.2f}")
+
+
+@app.command("console")
+def console_cmd(
+    port: int = typer.Option(8765, help="API port"),
+    host: str = typer.Option("127.0.0.1", help="Bind address (keep on localhost for local use)"),
+    actions: bool = typer.Option(False, "--actions", help="Enable human actions (gate, approve, promote, stop)"),
+    reload: bool = typer.Option(False, "--reload", help="Auto-reload on code changes (development)"),
+) -> None:
+    """Run the Underwriting Console (API + built web app) locally."""
+    import uvicorn
+
+    if actions:
+        os.environ["LAU_CONSOLE_ACTIONS"] = "1"
+    _log(f"Underwriting Console on http://{host}:{port}  (API docs /api/docs; actions {'ON' if actions else 'off'})")
+    uvicorn.run("lau.console.app:app", host=host, port=port, reload=reload, log_level="warning")
 
 
 @app.command()

@@ -47,6 +47,10 @@ def main() -> None:
         from lau.promotion.monitor import run_monitor
 
         run_monitor()
+    elif task == "evidence":
+        from lau.evidence.run import run_all
+
+        run_all()  # raises EvidenceRunError (the job fails visibly) if any step fails
     elif task == "run-cycle-if-queued":
         from lau.agents.orchestrator import run_cycle_sync
         from lau.store import get_store

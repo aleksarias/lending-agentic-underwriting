@@ -5,6 +5,7 @@ improvement over the reference grows with the number of tests already run on the
 
     margin(n) = base_auc_margin + mt_penalty_k * sqrt(ln(1 + n))
 
+n counts tests since the last reset (validation labels rebuilt for a new definition or data version).
 This is a pragmatic alpha-spending-style heuristic (validation AUC noise roughly scales with sqrt(log m) for the max
 of m correlated draws), not an exact correction; it is documented in docs/design-decisions.md. The counter is keyed
 by definition_version, so it resets when the definition (and therefore the validation labels) changes.
@@ -23,13 +24,21 @@ def required_margin(n_tests: int, cfg: dict) -> float:
 
 
 def n_tests(store, version: str) -> int:
+    """Validation tests run since the last reset for this definition version.
+
+    The harness_reference stage records a reset whenever validation labels are rebuilt (new definition OR new data
+    version), because tests on the previous validation sample say nothing about the new one.
+    """
     if not store.table_exists("ops", "experiment_counter"):
         return 0
     df = store.query(
-        f"SELECT count(*) AS n FROM {store.fq('ops', 'experiment_counter')} "
-        f"WHERE definition_version = '{version}' AND purpose = 'validation_test'"
+        f"SELECT purpose, ts FROM {store.fq('ops', 'experiment_counter')} WHERE definition_version = '{version}'"
     )
-    return int(df["n"].iloc[0])
+    resets = df.loc[df["purpose"] == "reset", "ts"]
+    tests = df[df["purpose"] == "validation_test"]
+    if len(resets):
+        tests = tests[tests["ts"] > resets.max()]
+    return int(len(tests))
 
 
 def record(store, version: str, candidate_ref: str, purpose: str = "validation_test") -> None:

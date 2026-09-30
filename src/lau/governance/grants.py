@@ -39,8 +39,15 @@ RW_SCHEMA = ("USE SCHEMA", "SELECT", "MODIFY", "CREATE TABLE", "CREATE MODEL", "
 
 # Objects the agent role may read in otherwise-restricted schemas (created by the pipeline).
 AGENT_READABLE_OBJECTS = {
-    "curated": ["applications_dev", "data_catalog"],
+    "curated": ["applications_dev", "data_catalog", "cashflow_monthly_dev"],
     "labels": ["labels_active"],
+}
+
+# Objects the console (read-only "ui" role) may read in otherwise-restricted schemas: metadata and aggregates only,
+# never applicant-level rows, all-version labels or the holdout.
+UI_READABLE_OBJECTS = {
+    "curated": ["data_catalog", "field_lineage"],
+    "labels": ["split_meta"],
 }
 
 GRANTS: list[Grant] = [
@@ -68,6 +75,15 @@ GRANTS: list[Grant] = [
     Grant("promoter", "SCHEMA", "production", privileges=ALL),
     Grant("promoter", "SCHEMA", "experiments", privileges=RO_SCHEMA),
     Grant("promoter", "SCHEMA", "ops", privileges=("USE SCHEMA", "SELECT")),
+    # --- ui (Underwriting Console, read-only) ---------------------------------------------------------
+    Grant("ui", "CATALOG", privileges=("USE CATALOG",)),
+    *[
+        Grant("ui", "SCHEMA", s, privileges=("USE SCHEMA", "SELECT"))
+        for s in ("ops", "experiments", "feature_registry", "production")
+    ],
+    Grant("ui", "SCHEMA", "curated", privileges=("USE SCHEMA",)),
+    Grant("ui", "SCHEMA", "labels", privileges=("USE SCHEMA",)),
+    *[Grant("ui", "TABLE", schema, obj, ("SELECT",)) for schema, objs in UI_READABLE_OBJECTS.items() for obj in objs],
 ]
 
 

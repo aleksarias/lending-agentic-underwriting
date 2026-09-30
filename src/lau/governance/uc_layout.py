@@ -53,15 +53,22 @@ def principal_ids(s: Settings) -> dict[str, str]:
     return {r: v["application_id"] for r, v in s.state.service_principals.items()}
 
 
+def sp_roles(s: Settings, state: WorkspaceState | None = None) -> list[str]:
+    """Roles backed by a service principal: the configured ones plus any already recorded in the workspace state."""
+    configured = [r for r, p in s.project.principals.items() if p.sp_display_name]
+    return configured + [r for r in (state.service_principals if state else {}) if r not in configured]
+
+
 def apply_object_grants(st: Store) -> None:
     """(Re)apply TABLE-level grants for objects that exist (views/tables are created by different stages).
     No-op locally (the same ACL is enforced in code)."""
     if isinstance(st, LocalStore):
         return
-    from lau.governance.grants import AGENT_READABLE_OBJECTS
+    from lau.governance.grants import AGENT_READABLE_OBJECTS, UI_READABLE_OBJECTS
 
     s = st.s
-    existing = {(k, o) for k, objs in AGENT_READABLE_OBJECTS.items() for o in objs if st.table_exists(k, o)}
+    readable = [(k, o) for d in (AGENT_READABLE_OBJECTS, UI_READABLE_OBJECTS) for k, objs in d.items() for o in objs]
+    existing = {(k, o) for k, o in readable if st.table_exists(k, o)}
     for stmt in grant_statements(s, principal_ids(s), objects_only=True):
         if any(f"`{s.schema(k)}`.`{o}`" in stmt for k, o in existing):
             st._execute(stmt)
@@ -78,12 +85,12 @@ def plan_init(s: Settings | None = None) -> list[str]:
         + ", ".join(f"{r}={p.sp_display_name}" for r, p in s.project.principals.items() if p.sp_display_name),
         "--    entitlements: workspace-access, databricks-sql-access; CAN_USE on the warehouse",
         f"-- 4. MLflow experiment {s.project.mlflow.experiment_path} (harness CAN_MANAGE, agent CAN_EDIT, "
-        "promoter CAN_READ)",
+        "promoter CAN_READ; ui none)",
         "-- 5. schemas + landing volumes:",
         *schema_ddl(s),
         "-- 6. grants (principal = SP application_id):",
-        *grant_statements(s, {r: f"<{r}-sp-app-id>" for r in ("harness", "agent", "promoter")}),
-        *landing_volume_grants(s, {r: f"<{r}-sp-app-id>" for r in ("harness", "agent", "promoter")}),
+        *grant_statements(s, {r: f"<{r}-sp-app-id>" for r in sp_roles(s)}),
+        *landing_volume_grants(s, {r: f"<{r}-sp-app-id>" for r in sp_roles(s)}),
         "-- (TABLE-level grants on views labels_active / applications_dev / data_catalog are re-applied by the "
         "pipeline after the views are created)",
     ]
@@ -203,9 +210,7 @@ def run_teardown(log: Callable[[str], None] = print, yes: bool = False) -> None:
             log(f"deleted service principal {sp['display_name']} ({role})")
         except Exception as e:  # noqa: BLE001
             log(f"SP delete skipped for {role}: {e}")
-    write_env_values(
-        {f"LAU_{r.upper()}_{k}": "" for r in ("harness", "agent", "promoter") for k in ("CLIENT_ID", "CLIENT_SECRET")}
-    )
+    write_env_values({f"LAU_{r.upper()}_{k}": "" for r in sp_roles(s, state) for k in ("CLIENT_ID", "CLIENT_SECRET")})
     if state.warehouse_original_settings:
         from lau.governance.principals import restore_adopted_warehouse
 

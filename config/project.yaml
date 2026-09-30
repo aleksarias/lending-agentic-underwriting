@@ -37,6 +37,7 @@ principals:
   harness:  {sp_display_name: lau-harness}
   agent:    {sp_display_name: lau-agent}
   promoter: {sp_display_name: lau-promoter}
+  ui:       {sp_display_name: lau-ui}      # Underwriting Console, read-only
 
 mlflow:
   experiment_path: /Shared/lau/pd_models

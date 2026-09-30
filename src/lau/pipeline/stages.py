@@ -66,22 +66,47 @@ def stage_ingest(ctx: PipelineContext) -> dict:
 
 
 def stage_curate(ctx: PipelineContext) -> dict:
+    from lau.synth import cashflow
     from lau.synth.generator import PII_COLUMNS, PROTECTED_COLUMNS
 
     st = ctx.store
     raw = st.query(f"SELECT * FROM {st.fq('raw', 'applications_raw')}")
     cur = raw.drop(columns=[c for c in PII_COLUMNS + PROTECTED_COLUMNS if c in raw.columns])
+    cf_info: dict = {}
+    if st.table_exists("raw", "bank_transactions"):
+        # Monthly cash flows from PRE-decision transactions only (guard lives in cashflow.monthly_sql), then
+        # per-applicant cf_* features. Post-decision rows exist in raw but never reach curated/model inputs.
+        months = int(get_settings().synth["cashflow"]["months_history"])
+        st.execute(
+            f"CREATE OR REPLACE TABLE {st.fq('curated', 'cashflow_monthly')} AS "
+            + cashflow.monthly_sql(st.fq("raw", "bank_transactions"), months)
+        )
+        monthly = st.query(f"SELECT * FROM {st.fq('curated', 'cashflow_monthly')}")
+        feats = cashflow.summarize_monthly(monthly, cur.set_index("application_id")["annual_income"])
+        cur = cur.drop(columns=[c for c in cashflow.CASHFLOW_FEATURES if c in cur.columns]).merge(
+            feats, on="application_id", how="left"
+        )
+        cf_info = {"cashflow_monthly_rows": len(monthly), "cashflow_features": len(cashflow.CASHFLOW_FEATURES)}
     st.write_df("curated", "applications", cur, mode="overwrite")
     lin = st.query(f"SELECT * FROM {st.fq('raw', 'field_lineage')}")
     st.write_df("curated", "field_lineage", lin, mode="overwrite")
     newapps = st.query(f"SELECT * FROM {st.fq('raw', 'new_applications_raw')}")
+    if cf_info:
+        newapps = newapps.merge(
+            cashflow.summarize_monthly(
+                st.query(f"SELECT * FROM {st.fq('curated', 'cashflow_monthly')} WHERE application_id LIKE 'N%'"),
+                newapps.set_index("application_id")["annual_income"],
+            ),
+            on="application_id",
+            how="left",
+        )
     st.write_df(
         "curated",
         "new_applications",
         newapps.drop(columns=[c for c in PROTECTED_COLUMNS if c in newapps.columns]),
         mode="overwrite",
     )
-    return {"n_applications": len(cur), "n_columns": cur.shape[1]}
+    return {"n_applications": len(cur), "n_columns": cur.shape[1], **cf_info}
 
 
 def stage_labels(ctx: PipelineContext) -> dict:
@@ -167,6 +192,13 @@ def refresh_active_views(st: Store, version: str, oot_start: str) -> None:
         "applications_dev",
         f"SELECT * FROM {st.fq('curated', 'applications')} WHERE origination_month < '{oot_start}'",
     )
+    if st.table_exists("curated", "cashflow_monthly"):
+        st.create_view(
+            "curated",
+            "cashflow_monthly_dev",
+            f"SELECT m.* FROM {st.fq('curated', 'cashflow_monthly')} m JOIN {st.fq('curated', 'applications')} a "
+            f"ON m.application_id = a.application_id WHERE a.origination_month < '{oot_start}'",
+        )
     from lau.governance.uc_layout import apply_object_grants
 
     apply_object_grants(st)

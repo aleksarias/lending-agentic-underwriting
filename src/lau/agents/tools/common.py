@@ -105,6 +105,7 @@ def describe_agent_tables() -> dict:
     for key, table in [
         ("curated", "applications_dev"),
         ("curated", "data_catalog"),
+        ("curated", "cashflow_monthly_dev"),
         ("labels", "labels_active"),
         ("feature_registry", "features"),
         ("feature_registry", "feature_performance"),
