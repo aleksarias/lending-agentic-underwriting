@@ -1,0 +1,6 @@
+# Pluggable PII masking applied to every tool result before it reaches an agent.
+# enabled: null => off in dev, on in prod.
+enabled: null
+strategy: hash                 # hash | drop | identity
+pii_columns: [first_name, surname, email, phone, ssn, street_address, date_of_birth, ip_address]
+free_text_patterns: [ssn, email, phone]

@@ -1,0 +1,18 @@
+# Claude model per agent role (stronger for planning, cheaper for narrow roles).
+agents:
+  planner: claude-opus-5-5
+  feature: claude-sonnet-5-5
+  modeling: claude-sonnet-5-5
+  redteam: claude-sonnet-5-5
+  profiler: claude-haiku-4-5-20251001
+  compliance: claude-haiku-4-5-20251001
+  curator: claude-haiku-4-5-20251001
+# Rough $/cycle priors used only for the pre-run estimate; actual cost comes from ResultMessage.total_cost_usd.
+estimate_usd_per_run:
+  planner: 0.60
+  profiler: 0.15
+  feature: 1.00
+  modeling: 1.00
+  redteam: 0.70
+  compliance: 0.20
+  curator: 0.10

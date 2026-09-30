@@ -1,0 +1,48 @@
+# Project-wide settings. No secrets here: credentials come from ~/.databrickscfg profiles or env vars.
+environment: dev            # dev | prod. prod turns masking on by default.
+backend: databricks         # databricks | local (local = DuckDB lake under .local_lake, used by tests/offline)
+host: https://dbc-67e8cd43-5f63.cloud.databricks.com
+
+catalog: lending_uw_dev
+# If CREATE CATALOG is denied, `lau init` falls back to prefixed schemas inside this catalog.
+catalog_fallback: workspace
+schema_prefix_fallback: lau_
+
+schemas:
+  raw: raw
+  curated: curated
+  labels: labels
+  feature_registry: feature_registry
+  experiments: experiments
+  holdout: holdout           # readable only by the harness principal
+  production: production     # written only by the promoter principal after human approval
+  ops: ops                   # pipeline state, approvals, traces, cost log
+
+warehouse:
+  name: lau-warehouse
+  cluster_size: 2X-Small
+  auto_stop_mins: 5
+  # DBU/hour for a serverless SQL warehouse of this size (Databricks pricing page); used for estimates only.
+  dbu_per_hour: 4.0
+  usd_per_dbu: 0.70
+  # If the workspace refuses to create another warehouse (quota), adopt this existing one: resize it to
+  # cluster_size/auto_stop_mins above and restore its original settings on `lau teardown`. (Approved 2026-09-30.)
+  adopt_existing_if_quota: Serverless Starter Warehouse
+
+# Credentials for every role come ONLY from .env (see .env.example):
+#   admin    -> DATABRICKS_CONFIG_PROFILE (OAuth U2M; refresh token in OS keychain) or DATABRICKS_TOKEN
+#   others   -> LAU_<ROLE>_CLIENT_ID / LAU_<ROLE>_CLIENT_SECRET (OAuth M2M; written by `lau init`)
+principals:
+  admin:    {}
+  harness:  {sp_display_name: lau-harness}
+  agent:    {sp_display_name: lau-agent}
+  promoter: {sp_display_name: lau-promoter}
+
+mlflow:
+  experiment_path: /Shared/lau/pd_models
+  candidate_model: pd_candidates      # registered in <catalog>.<experiments>
+  production_model: pd_model          # registered in <catalog>.<production>
+
+local_lake_dir: .local_lake
+reports_dir: reports/cycles
+lessons_file: LESSONS.md

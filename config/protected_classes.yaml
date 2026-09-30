@@ -1,0 +1,18 @@
+# Synthetic protected-class definitions for fairness testing (dev only).
+# NOTE: for non-mortgage credit, lenders generally may not collect race/ethnicity/sex; in production these would
+# be estimated (e.g. BISG) for fair-lending testing only. Counsel must review. See docs/compliance-notes.md.
+protected_classes:
+  race_ethnicity:
+    column: race_ethnicity
+    reference_group: white
+    protected_groups: [black, hispanic, asian, other]
+  sex:
+    column: sex
+    reference_group: male
+    protected_groups: [female]
+  age_62_plus:
+    column: age_62_plus
+    reference_group: "false"
+    protected_groups: ["true"]
+# Features never allowed in a model (direct protected attributes and known close proxies).
+prohibited_features: [race_ethnicity, sex, age, age_62_plus, first_name, surname]

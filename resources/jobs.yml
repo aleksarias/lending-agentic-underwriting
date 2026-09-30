@@ -1,0 +1,91 @@
+# All jobs run on serverless compute as the harness service principal (the pipeline identity).
+# LAU_RUNTIME_ROLE tells lau.credentials to use the job's native (run_as) identity for that role.
+resources:
+  jobs:
+    lau_definition_sync:
+      name: lau-definition-sync
+      description: >
+        Detects a changed default-definition hash and applies it ONLY if a human approval for that exact hash is
+        recorded (lau default-definition plan --approve). Otherwise fails loudly. Never auto-promotes.
+      run_as:
+        service_principal_name: ${var.harness_sp}
+      trigger:
+        periodic: {interval: 1, unit: DAYS}
+      environments:
+        - environment_key: lau
+          spec:
+            environment_version: ${var.environment_version}
+            dependencies: ["../dist/*.whl"]
+      tasks:
+        - task_key: sync
+          environment_key: lau
+          python_wheel_task:
+            package_name: lending_agentic_underwriting
+            entry_point: lau-job
+            parameters: ["definition-sync"]
+      max_concurrent_runs: 1
+      timeout_seconds: 3600
+
+    lau_shadow_scoring:
+      name: lau-shadow-scoring
+      run_as:
+        service_principal_name: ${var.harness_sp}
+      trigger:
+        periodic: {interval: 1, unit: DAYS}
+      environments:
+        - environment_key: lau
+          spec:
+            environment_version: ${var.environment_version}
+            dependencies: ["../dist/*.whl"]
+      tasks:
+        - task_key: shadow
+          environment_key: lau
+          python_wheel_task:
+            package_name: lending_agentic_underwriting
+            entry_point: lau-job
+            parameters: ["shadow"]
+      timeout_seconds: 1800
+
+    lau_monitoring:
+      name: lau-monitoring
+      run_as:
+        service_principal_name: ${var.harness_sp}
+      trigger:
+        periodic: {interval: 1, unit: DAYS}
+      environments:
+        - environment_key: lau
+          spec:
+            environment_version: ${var.environment_version}
+            dependencies: ["../dist/*.whl"]
+      tasks:
+        - task_key: monitor
+          environment_key: lau
+          python_wheel_task:
+            package_name: lending_agentic_underwriting
+            entry_point: lau-job
+            parameters: ["monitor"]
+      timeout_seconds: 1800
+
+    lau_improvement_cycle:
+      name: lau-improvement-cycle
+      description: >
+        Runs one agent cycle when ops.cycle_queue has work. Requires Databricks secret scope `lau` with
+        anthropic_api_key, agent_client_id/secret (see docs/governance.md). Deployed PAUSED.
+      run_as:
+        service_principal_name: ${var.harness_sp}
+      trigger:
+        periodic: {interval: 1, unit: WEEKS}
+      environments:
+        - environment_key: lau
+          spec:
+            environment_version: ${var.environment_version}
+            dependencies: ["../dist/*.whl"]
+      tasks:
+        - task_key: cycle
+          environment_key: lau
+          python_wheel_task:
+            package_name: lending_agentic_underwriting
+            entry_point: lau-job
+            parameters: ["run-cycle-if-queued"]
+      max_concurrent_runs: 1
+      timeout_seconds: 5400

@@ -1,0 +1,10 @@
+seed: 20260930
+n_applications: 50000         # sized for cheap serverless SQL; scale up after checking cost
+n_noise_numeric: 110
+start_month: "2023-01"
+n_origination_months: 36
+as_of_month: "2026-06"        # performance observed up to this month (recent vintages immature)
+max_perf_months: 30
+approval_rate: 0.70           # legacy policy approves the best 70% by a legacy score (selection bias)
+drift_start_month: "2025-01"
+n_new_applications: 5000      # post-as-of applications for shadow scoring (no performance)

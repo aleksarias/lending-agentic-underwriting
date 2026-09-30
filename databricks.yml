@@ -1,0 +1,35 @@
+# Databricks Asset Bundle for lending-agentic-underwriting.
+# Jobs are deployed PAUSED; the same `lau` entry points run locally and on serverless.
+bundle:
+  name: lending-agentic-underwriting
+
+variables:
+  harness_sp:
+    description: Application ID of the lau-harness service principal (see .lau/workspace_state.json)
+  environment_version:
+    description: Serverless environment version (v3-v5 = Python 3.12, matching the local toolchain)
+    default: "4"
+
+artifacts:
+  lau_wheel:
+    type: whl
+    build: uv build --wheel
+    path: .
+
+include:
+  - resources/*.yml
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: https://dbc-67e8cd43-5f63.cloud.databricks.com
+    presets:
+      trigger_pause_status: PAUSED
+  prod:
+    mode: production
+    workspace:
+      host: https://PLACEHOLDER-prod-workspace.cloud.databricks.com  # TODO: set when a prod workspace exists
+    presets:
+      trigger_pause_status: PAUSED

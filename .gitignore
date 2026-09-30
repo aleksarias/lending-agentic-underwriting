@@ -1,0 +1,51 @@
+# Secrets: never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.databrickscfg
+*api_key*
+*api-key*
+*apikey*
+ANTHROPIC*
+*secret*
+!**/test_*secret*.py
+
+# Python / tooling
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+dist/
+build/
+*.egg-info/
+
+# Local data lake, MLflow, artifacts
+.local_lake/
+mlruns/
+mlartifacts/
+artifacts/
+reports/cycles/
+
+# Databricks bundle state
+.databricks/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Workspace-specific generated state (IDs only, no secrets)
+.lau/
+
+# Anthropic key file provided by the user (never commit, never print)
+anthropic_token*
+*token*.txt
+
+# Run logs and local backups
+*.log
+*.bak
+reports/demo/

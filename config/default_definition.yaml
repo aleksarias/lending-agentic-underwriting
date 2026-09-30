@@ -1,0 +1,27 @@
+# SINGLE SOURCE OF TRUTH for the target label.
+# Only a human may change this file; apply with `lau default-definition plan` then `apply`.
+# Every semantic field below is part of the content hash (definition_version). `metadata` is not.
+metadata:
+  name: dpd60_ever_12m
+  description: 60+ DPD ever within 12 months on book, or charge-off/bankruptcy/settlement.
+  owner: credit-risk
+
+delinquency_threshold_dpd: 60
+delinquency_timing: ever             # ever | end_of_window
+observation_window_months: 12
+min_seasoning_months: 12
+maturity_rule: exclude               # exclude | censor  (loans observed < window months)
+include_charge_off: true
+include_bankruptcy: true
+include_settlement: true
+include_forbearance_as_default: false
+cure_handling:
+  mode: count_if_ever                # count_if_ever | cured_not_default
+  cure_months_required: 3            # consecutive current months after the event (cured_not_default only)
+exclusions:
+  - fraud_confirmed
+  - deceased
+  - early_payoff
+early_payoff_within_months: 3
+balance_materiality_threshold: 50.0  # past-due amount below this is ignored
+custom_sql_predicate: null           # optional boolean SQL over loan-month columns; validated and sandboxed

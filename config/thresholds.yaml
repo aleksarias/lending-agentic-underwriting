@@ -1,0 +1,28 @@
+splits:
+  train_frac: 0.60          # by origination-month, of eligible labelled loans
+  validation_frac: 0.20     # remainder = out-of-time holdout
+  early_stopping_tail_frac: 0.15  # last share of train months used for early stopping (never validation)
+gate:
+  base_auc_margin: 0.002    # required validation AUC gain over reference, before multiple-testing penalty
+  mt_penalty_k: 0.003       # margin += k * sqrt(ln(1 + n_tests_this_definition))
+  holdout_auc_tolerance: 0.0 # candidate holdout AUC must be >= reference holdout AUC - tolerance
+  max_ece: 0.03             # expected calibration error on validation
+  max_slice_auc_drop: 0.06  # worst time-slice AUC vs overall
+  max_score_psi: 0.25       # train vs validation score PSI
+  min_segment_auc: 0.60
+leakage:
+  single_feature_auc_max: 0.85
+  post_decision_share_max: 0.0   # share of rows with field timestamp after decision_ts
+  target_like_name_patterns: ["dpd", "delinq_after", "charge_off", "collection", "default_flag", "chargeoff"]
+fairness:
+  approval_rate: 0.70       # approve the lowest-PD 70% for disparate-impact calculations
+  min_air: 0.80             # adverse impact ratio (four-fifths rule) - below => gate fail
+  proxy_auc_flag: 0.65      # feature alone predicting protected-group membership
+monitoring:
+  psi_warn: 0.10
+  psi_alert: 0.25
+  default_rate_rel_tol: 0.25   # observed vs expected (relative) before alert
+  early_indicator_dpd: 30
+  early_indicator_mob: 6
+reason_codes:
+  top_n: 4

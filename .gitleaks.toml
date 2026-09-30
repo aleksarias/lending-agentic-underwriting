@@ -1,0 +1,14 @@
+title = "lending-agentic-underwriting"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "databricks-oauth-secret"
+description = "Databricks service principal OAuth secret"
+regex = '''dose[0-9a-f]{32}'''
+keywords = ["dose"]
+
+[allowlist]
+description = "test placeholders"
+paths = ['''\.env\.example''']

@@ -1,0 +1,20 @@
+# Hard caps. The orchestrator (plain Python) enforces these; agents cannot change them.
+cycle:
+  max_databricks_dbu: 5.0
+  max_anthropic_usd: 10.0
+  max_wall_clock_min: 60
+  max_experiments: 20            # candidate evaluations against validation per cycle
+  max_critique_rounds: 2         # red-team -> modeling revise loops
+  max_features_proposed: 15
+monthly:
+  hard_stop_usd: 100.0           # Databricks (estimated+actual) + Anthropic, per calendar month
+agents:                          # per-agent-run caps
+  planner:    {max_turns: 12, max_budget_usd: 1.50, timeout_min: 10}
+  profiler:   {max_turns: 20, max_budget_usd: 0.75, timeout_min: 10}
+  feature:    {max_turns: 30, max_budget_usd: 2.00, timeout_min: 15}
+  modeling:   {max_turns: 30, max_budget_usd: 2.00, timeout_min: 20}
+  redteam:    {max_turns: 25, max_budget_usd: 1.50, timeout_min: 15}
+  compliance: {max_turns: 15, max_budget_usd: 0.75, timeout_min: 10}
+  curator:    {max_turns: 10, max_budget_usd: 0.50, timeout_min: 5}
+holdout:
+  max_gate_evaluations_per_definition: 5   # the holdout is a scarce resource too
