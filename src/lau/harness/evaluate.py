@@ -4,22 +4,30 @@ Computes AUC/KS, calibration, lift, stability across time slices and segments, P
 leakage, fairness (adverse impact + proxies), reason-code quality, and the comparison to the reference: the
 champion OF THE SAME definition version, else the version's baseline. Each counted evaluation increments the
 multiple-testing ledger. Results go to ops.evaluations (and the candidate's MLflow run).
+
+Every result also records the versions it was produced under (definition, data, git) and, once the benchmark ledger
+exists, how the candidate compares with the best known model on the same validation frame (`beats_best_known`).
 """
 
 from __future__ import annotations
 
 import json
+import subprocess
 import uuid
 from datetime import UTC, datetime
+from functools import lru_cache
 
 import numpy as np
 import pandas as pd
 
 from lau.data.features import apply_features, load_dev_frame, prohibited_features
 from lau.data.splits import read_split_meta
+from lau.evidence import ledger
+from lau.evidence.config import load_benchmark_config
 from lau.harness import fairness, leakage, metrics, multiple_testing, reason_codes
+from lau.modeling import registry_io
 from lau.modeling.registry_io import DefinitionMismatchError, champion_for
-from lau.settings import get_settings
+from lau.settings import ROOT, get_settings
 from lau.store import get_store
 
 SEGMENTS = ["channel", "product", "thin_file", "employment_type"]
@@ -84,6 +92,75 @@ def feature_leakage(model, dev_train: pd.DataFrame, cat: pd.DataFrame, cfg: dict
     return out
 
 
+def _git_sha() -> str | None:
+    """Short commit of the running code, or None outside a git checkout."""
+    try:
+        out = subprocess.run(  # noqa: S603 - fixed argv, no user input
+            ["git", "rev-parse", "--short", "HEAD"],  # noqa: S607 - git on PATH is the point
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    sha = out.stdout.strip()
+    return sha if out.returncode == 0 and sha else None
+
+
+def _versions(store, definition_version: str) -> dict:
+    """What this evaluation was produced under: definition, latest data load, code."""
+    try:
+        row = ledger.latest_data_version(store)
+    except Exception:  # noqa: BLE001 - provenance must never break an evaluation
+        row = None
+    return {
+        "definition_version": definition_version,
+        "data_version": None if row is None else str(row["data_version"]),
+        "git_sha": _git_sha(),
+    }
+
+
+@lru_cache(maxsize=2)
+def _load_best_known(uri: str, scope: str):
+    """Best-known model, cached per registry URI (versions are immutable); `scope` separates lakes/catalogs."""
+    return registry_io.load_pd_model(uri, "harness")
+
+
+def _scope() -> str:
+    s = get_settings()
+    return str(s.local_lake) if s.project.backend == "local" else s.catalog
+
+
+def best_known_check(store, candidate_ref: str, val: pd.DataFrame, y_val: np.ndarray, candidate_auc: float):
+    """Compare the candidate with the best known model of the benchmark ledger on the same validation frame.
+
+    Best known = highest AUC under the primary benchmark in the latest `ops.benchmark_results` run, excluding the
+    frozen reference and the candidate itself. Returns (result["best_known"], check or None); it never raises: any
+    problem yields ({"skipped": reason}, None) and the evaluation proceeds without this check.
+    """
+    try:
+        if not store.table_exists("ops", "benchmark_results"):
+            return {"skipped": "no benchmark ledger yet (ops.benchmark_results); run `lau evidence run`"}, None
+        cfg = load_benchmark_config()
+        rows = ledger.latest_benchmark_rows(store, metric="auc", benchmark_key=cfg.primary)
+        kind, _, version = candidate_ref.partition(":")
+        own = {f"{registry_io.candidate_model_name()}/{version}"} if kind in ("candidate", "baseline") else set()
+        best = ledger.best_known(rows, cfg.primary, cfg.reference.key, exclude=own)
+        if best is None:
+            return {"skipped": "no other model in the benchmark ledger to compare with"}, None
+        name, mv = ledger.split_model_key(str(best["model_key"]))
+        model = _load_best_known(f"models:/{name}/{mv}", _scope())
+        auc = metrics.auc(y_val, model.predict_pd(val))
+        if auc != auc:
+            return {"skipped": "best known model has no defined AUC on this validation frame"}, None
+        info = {"model_key": str(best["model_key"]), "label": str(best["model_label"]), "auc": float(auc)}
+        return info, bool(candidate_auc >= auc)
+    except Exception as e:  # noqa: BLE001 - an unavailable comparison must never break an evaluation
+        return {"skipped": f"{type(e).__name__}: {str(e)[:200]}"}, None
+
+
 def evaluate_model(
     model, version: str, candidate_ref: str, count_test: bool = True, compare_to_reference: bool = True, store=None
 ) -> dict:
@@ -133,6 +210,9 @@ def evaluate_model(
     desc = dict(zip(cat["variable"], cat["description"], strict=False))
     codes = reason_codes.reason_codes(model, pop, sample, s.thresholds["reason_codes"]["top_n"], desc)
     prohibited_used = sorted(set(model.features) & prohibited_features())
+    from lau.governance.human_input import rejected_features
+
+    rejected_used = sorted(set(model.features) & set(rejected_features()))  # a person rejected these features
     rq = reason_codes.reason_quality(
         codes, int(sample.sum()), s.thresholds["reason_codes"]["top_n"], set(flagged_proxies) | prohibited_features()
     )
@@ -158,6 +238,12 @@ def evaluate_model(
     n_now = n_before + (1 if count_test else 0)
     margin = multiple_testing.required_margin(n_now, th)
 
+    # ---- best known model (benchmark ledger); skipped for reference evaluations ------------------------------------
+    if compare_to_reference:
+        best_known, beats_best = best_known_check(store, candidate_ref, val, y_val, m["auc"])
+    else:
+        best_known, beats_best = {"skipped": "reference evaluation (compare_to_reference=False)"}, None
+
     worst_slice = min(slices.values()) if slices else m["auc"]
     min_seg = min(segs.values()) if segs else m["auc"]
     checks = {
@@ -168,15 +254,19 @@ def evaluate_model(
         "score_psi": bool(score_psi <= th["max_score_psi"]),
         "no_leakage": not any(x["risk"] == "high" for x in leaks),
         "no_prohibited_features": not prohibited_used,
+        "no_rejected_features": not rejected_used,
         "no_proxy_features": not flagged_proxies,
         "adverse_impact": bool(fair["min_air"] >= fcfg["min_air"]),
         "reason_codes": bool(rq["coverage_any"] >= 0.99 and rq["flagged_feature_share"] == 0.0),
     }
+    if beats_best is not None:
+        checks["beats_best_known"] = beats_best
     result = {
         "eval_id": f"ev-{uuid.uuid4().hex[:10]}",
         "candidate_ref": candidate_ref,
         "definition_version": version,
         "ts": datetime.now(UTC).isoformat(),
+        "versions": _versions(store, version),
         "model": model.describe(),
         "validation": m,
         "lift": metrics.lift_by_decile(y_val, p_val).to_dict("records"),
@@ -190,9 +280,11 @@ def evaluate_model(
         "proxies_flagged": flagged_proxies,
         "proxy_detail": {k: v for k, v in prox.items() if v["proxy_auc"] > 0.55},
         "prohibited_features_used": prohibited_used,
+        "rejected_features_used": rejected_used,
         "reason_code_quality": rq,
         "reason_code_sample": codes.head(40).to_dict("records"),
         "reference": reference,
+        "best_known": best_known,
         "n_tests": n_now,
         "required_margin": margin,
         "checks": checks,

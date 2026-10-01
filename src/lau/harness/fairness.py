@@ -49,18 +49,34 @@ def adverse_impact(scores: pd.DataFrame, protected: pd.DataFrame, classes: dict,
 
 
 def proxy_scores(features: pd.DataFrame, protected: pd.DataFrame, classes: dict) -> pd.DataFrame:
-    """For each feature and protected class: AUC of the feature alone predicting protected-group membership."""
+    """AUC of each feature alone predicting protected-group membership.
+
+    Scored both pooled (any protected group vs everyone else) and per group (that group vs the reference group),
+    because a feature that tracks one group can be diluted below the threshold when groups are pooled.
+    """
     df = features.merge(protected, on="application_id", how="inner")
     rows = []
     for cname, spec in classes.items():
         col = spec["column"]
         if col not in df:
             continue
-        member = df[col].astype(str).isin([str(g) for g in spec["protected_groups"]]).astype(int).to_numpy()
+        g = df[col].astype(str)
+        groups = [str(x) for x in spec["protected_groups"]]
+        comparisons = [("pooled", np.ones(len(df), bool), g.isin(groups).to_numpy())]
+        ref = str(spec["reference_group"])
+        for grp in groups:
+            keep = g.isin([grp, ref]).to_numpy()
+            if (g == grp).sum() >= 50:
+                comparisons.append((grp, keep, (g == grp).to_numpy()))
         for f in features.columns:
             if f == "application_id":
                 continue
-            rows.append({"feature": f, "protected_class": cname, "proxy_auc": univariate_auc(df[f], member)})
+            best, best_grp = 0.0, None
+            for grp, keep, member in comparisons:
+                a = univariate_auc(df.loc[keep, f], member[keep].astype(int))
+                if a == a and a > best:
+                    best, best_grp = a, grp
+            rows.append({"feature": f, "protected_class": cname, "protected_group": best_grp, "proxy_auc": best})
     return pd.DataFrame(rows)
 
 
@@ -72,6 +88,7 @@ def proxy_summary(proxy: pd.DataFrame, threshold: float) -> dict[str, dict]:
         r["feature"]: {
             "proxy_auc": float(r["proxy_auc"]),
             "protected_class": r["protected_class"],
+            "protected_group": r.get("protected_group"),
             "flag": bool(r["proxy_auc"] > threshold),
         }
         for r in best.to_dict("records")

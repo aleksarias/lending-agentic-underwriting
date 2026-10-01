@@ -8,3 +8,10 @@ max_perf_months: 30
 approval_rate: 0.70           # legacy policy approves the best 70% by a legacy score (selection bias)
 drift_start_month: "2025-01"
 n_new_applications: 5000      # post-as-of applications for shadow scoring (no performance)
+
+# Bank-statement (cash-flow) simulation. Calibration targets are approximate; see docs/synthetic-data.md.
+cashflow:
+  months_history: 6                 # months of statements before the decision
+  post_decision_months: 2           # funded loans keep a post-decision feed in RAW (must never reach features)
+  median_buffer_months: 1.5         # liquidity buffer (CFPB Making Ends Meet: ~half can cover <= 2 months)
+  income_overstatement_share: 0.12  # applicants whose stated income exceeds bank-verified income by 20-50%

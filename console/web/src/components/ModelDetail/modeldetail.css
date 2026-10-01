@@ -1,0 +1,28 @@
+/* Model detail screen. Class names are prefixed with "modeldetail-". Colors come only from tokens. */
+
+.modeldetail-params { display: grid; grid-template-columns: fit-content(50%) minmax(0, 1fr); gap: 3px 14px; margin: 0; font-size: var(--fs-sm); }
+.modeldetail-params dt { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.modeldetail-params dd { margin: 0; font-family: var(--font-mono); font-size: 12px; overflow-wrap: anywhere; }
+
+.modeldetail-engineered { display: grid; gap: 10px; }
+.modeldetail-engineered .item { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 12px; display: grid; gap: 6px; background: var(--surface); min-width: 0; }
+.modeldetail-engineered .name { font-family: var(--font-mono); font-weight: 600; font-size: 13px; }
+
+/* Lineage: layers of small cards joined by arrows, top to bottom */
+.modeldetail-flow { list-style: none; margin: 0; padding: 0; display: grid; justify-items: center; }
+.modeldetail-layer { display: grid; justify-items: center; width: 100%; }
+.modeldetail-layer ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; width: 100%; }
+.modeldetail-node { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 9px 12px; width: min(100%, 27rem); display: grid; gap: 2px; text-align: left; min-width: 0; }
+.modeldetail-node .type { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.modeldetail-node .label { font-weight: 600; overflow-wrap: anywhere; }
+.modeldetail-node .detail { font-size: var(--fs-sm); color: var(--muted); overflow-wrap: anywhere; }
+.modeldetail-node.here { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.modeldetail-node.pending { border-style: dashed; background: var(--surface-2); }
+.modeldetail-arrow { display: block; line-height: 0; padding: 4px 0; }
+
+.modeldetail-gate-checks { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; font-size: var(--fs-sm); }
+.modeldetail-gate-checks li { display: flex; justify-content: space-between; gap: 8px; }
+
+.modeldetail-trail { display: grid; gap: var(--gap); grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); align-items: start; }
+.modeldetail-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.modeldetail-list li { display: grid; gap: 3px; min-width: 0; }

@@ -1,0 +1,35 @@
+/* History screen. Colors only through the design tokens; class names are prefixed with the screen name. */
+.history-filters { display: grid; gap: 12px; }
+.history-groups { display: flex; flex-wrap: wrap; gap: 12px 26px; }
+.history-group { display: grid; gap: 5px; min-width: 0; align-content: start; }
+.history-group-name {
+  font: inherit; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600;
+  color: var(--muted); background: none; border: 0; padding: 0; text-align: left; cursor: pointer;
+}
+.history-group-name:hover { color: var(--accent); }
+.history-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.history-chip {
+  font: inherit; font-size: 12px; font-weight: 600; line-height: 1.5; padding: 2px 11px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer;
+}
+.history-chip:hover { border-color: var(--accent); }
+.history-chip[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+.history-timeline { min-width: 0; }
+.history-band + .history-band { border-top: 1px solid var(--line); }
+/* The same era carried over a page boundary: no divider through the middle of it. */
+.history-band.continued { border-top: 0; }
+.history-era-head {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 10px 16px;
+  background: var(--surface-2); border-bottom: 1px solid var(--line);
+}
+.history-band + .history-band > .history-era-head { border-top: 0; }
+.history-era-title { margin: 0; font-family: var(--font-body); font-size: var(--fs-md); font-weight: 600; }
+.history-band-body { padding: 2px 16px 6px; min-width: 0; }
+.history-foot {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px;
+  padding: 10px 16px; border-top: 1px solid var(--line); background: var(--surface-2);
+}
+.history-state { padding: 14px 16px; }
+.history-compare-link:hover { text-decoration: none; }
+.history-badge-wrap .badge { white-space: normal; }

@@ -68,14 +68,15 @@ class PDModelPyfunc(mlflow.pyfunc.PythonModel):
 
 
 @contextlib.contextmanager
-def mlflow_session(role: str) -> Iterator[MlflowClient]:
+def mlflow_session(role: str, experiment: str | None = None) -> Iterator[MlflowClient]:
+    """MLflow clients as `role`. `experiment` overrides the agents' experiment (decision builds use their own)."""
     s = get_settings()
+    exp_name = experiment or s.project.mlflow.experiment_path
     if s.project.backend == "local":
         lake = s.local_lake
         uri = f"sqlite:///{lake / 'mlflow.db'}"
         mlflow.set_tracking_uri(uri)
         mlflow.set_registry_uri(uri)
-        exp_name = s.project.mlflow.experiment_path
         if mlflow.get_experiment_by_name(exp_name) is None:
             mlflow.create_experiment(exp_name, artifact_location=(lake / "mlartifacts").as_uri())
         mlflow.set_experiment(exp_name)
@@ -86,7 +87,7 @@ def mlflow_session(role: str) -> Iterator[MlflowClient]:
     with role_env(role):
         mlflow.set_tracking_uri("databricks")
         mlflow.set_registry_uri("databricks-uc")
-        mlflow.set_experiment(s.project.mlflow.experiment_path)
+        mlflow.set_experiment(exp_name)
         yield MlflowClient(tracking_uri="databricks", registry_uri="databricks-uc")
 
 

@@ -35,6 +35,7 @@ class SchemaNames(_Strict):
     holdout: str
     production: str
     ops: str
+    simulation: str
 
 
 class WarehouseCfg(_Strict):
@@ -83,6 +84,7 @@ class WorkspaceState(BaseModel):
     warehouse_original_settings: dict | None = None  # set when an existing warehouse was adopted + resized
     service_principals: dict[str, dict[str, str]] = {}  # role -> {id, application_id, display_name}
     experiment_id: str | None = None
+    decision_experiment_id: str | None = None
     job_ids: dict[str, str] = {}
 
 
@@ -106,6 +108,9 @@ class Settings:
         self.protected = _load_yaml("protected_classes.yaml")
         self.synth = _load_yaml("synth.yaml")
         self.masking = _load_yaml("masking.yaml")
+        self.decisioning = _load_yaml("decisioning.yaml")
+        self.feedback = _load_yaml("feedback.yaml")
+        self.readiness = _load_yaml("readiness.yaml")
         self.state = load_state()
 
     # ---- naming -------------------------------------------------------------------------------------

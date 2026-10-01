@@ -1,0 +1,67 @@
+/* Underwriting Console design tokens. Every color in the app comes from these variables (light + dark). */
+:root {
+  --bg: #f4f5f1;
+  --surface: #ffffff;
+  --surface-2: #eef0ea;
+  --surface-3: #e4e7df;
+  --ink: #18212b;
+  --muted: #5a6470;
+  --faint: #68717b;  /* 4.9:1 on white (WCAG AA for small text) */
+  --line: #d8dcd2;
+  --accent: #1f6a58;
+  --accent-ink: #ffffff;
+  --accent-soft: #dcebe5;
+  --good: #256b42;  /* 5.5:1 on --good-soft */
+  --good-soft: #e1f1e6;
+  --warn: #9a5b0f;
+  --warn-soft: #f7ebd6;
+  --crit: #a3312b;
+  --crit-soft: #f6e0dd;
+  --info: #2f5f8a;
+  --info-soft: #dfe9f3;
+  /* chart series (colorblind-friendly, distinct in both themes) */
+  --s1: #1f6a58;
+  --s2: #8a5a9c;
+  --s3: #b86b1f;
+  --s4: #2f5f8a;
+  --s5: #7a7f3a;
+  --s6: #a3312b;
+  --chart-grid: #e2e5dd;
+  --proposed: #8a5a9c; /* agent claims */
+  --measured: #1f6a58; /* harness / production measurements */
+
+  --font-display: "Newsreader", Georgia, "Times New Roman", serif;
+  --font-body: "Public Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  --fs-xs: 11.5px;
+  --fs-sm: 13px;
+  --fs-md: 14.5px;
+  --fs-lg: 17px;
+  --fs-xl: 22px;
+  --fs-2xl: 30px;
+
+  --radius: 10px;
+  --radius-sm: 7px;
+  --gap: 14px;
+  --sidebar-w: 236px;
+  --header-h: 52px;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11161c; --surface: #19212a; --surface-2: #1f2933; --surface-3: #263340; --ink: #e7ebe8; --muted: #9aa5ae;
+    --faint: #8b96a1; --line: #2e3a45; --accent: #5cc3a6; --accent-ink: #0d1f19; --accent-soft: #173a31;
+    --good: #6ccf8f; --good-soft: #17331f; --warn: #e3a54f; --warn-soft: #3a2a12; --crit: #f08a82; --crit-soft: #3c1c1a;
+    --info: #86b6e0; --info-soft: #1b2c3c; --s1: #5cc3a6; --s2: #c49bd4; --s3: #e7a35e; --s4: #86b6e0; --s5: #c4c77a;
+    --s6: #f08a82; --chart-grid: #2a3540; --proposed: #c49bd4; --measured: #5cc3a6; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11161c; --surface: #19212a; --surface-2: #1f2933; --surface-3: #263340; --ink: #e7ebe8; --muted: #9aa5ae;
+  --faint: #8b96a1; --line: #2e3a45; --accent: #5cc3a6; --accent-ink: #0d1f19; --accent-soft: #173a31;
+  --good: #6ccf8f; --good-soft: #17331f; --warn: #e3a54f; --warn-soft: #3a2a12; --crit: #f08a82; --crit-soft: #3c1c1a;
+  --info: #86b6e0; --info-soft: #1b2c3c; --s1: #5cc3a6; --s2: #c49bd4; --s3: #e7a35e; --s4: #86b6e0; --s5: #c4c77a;
+  --s6: #f08a82; --chart-grid: #2a3540; --proposed: #c49bd4; --measured: #5cc3a6; color-scheme: dark;
+}

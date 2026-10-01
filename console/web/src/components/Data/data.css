@@ -1,0 +1,12 @@
+/* Data catalog screens. Class names are prefixed with "data-". Colors come only from tokens. */
+
+.data-watch { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.data-watch li { display: grid; gap: 3px; min-width: 0; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.data-watch li:last-child { padding-bottom: 0; border-bottom: 0; }
+.data-watch .name { font-family: var(--font-mono); font-weight: 600; font-size: 13px; overflow-wrap: anywhere; }
+
+.data-desc { display: block; font-size: var(--fs-xs); color: var(--muted); max-width: 26ch; }
+.data-check { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-sm); color: var(--muted); padding-bottom: 7px; }
+
+.data-charts { display: grid; gap: var(--gap); grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); }
+.data-axis-note { font-size: var(--fs-xs); color: var(--muted); margin-top: 4px; }

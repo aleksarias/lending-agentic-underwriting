@@ -103,10 +103,14 @@ def tool_error(msg: str) -> dict:
     return {"content": [{"type": "text", "text": f"ERROR: {redact_text(msg)[:4000]}"}], "is_error": True}
 
 
+# Roles that are not cycle specialists (the console's read-only question answering): their prompt is used without
+# the shared cycle preamble in _common.md.
+STANDALONE_ROLES = frozenset({"ask"})
+
+
 def load_prompt(role: str, **fmt: str) -> str:
-    common = (PROMPTS_DIR / "_common.md").read_text()
     body = (PROMPTS_DIR / f"{role}.md").read_text()
-    text = common + "\n\n" + body
+    text = body if role in STANDALONE_ROLES else (PROMPTS_DIR / "_common.md").read_text() + "\n\n" + body
     for k, v in fmt.items():
         text = text.replace("{{" + k + "}}", v)
     return text

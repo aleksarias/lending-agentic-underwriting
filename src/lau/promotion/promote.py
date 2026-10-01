@@ -5,8 +5,10 @@ Flow (`lau promote <candidate_model_version>`):
   2. harness promotion gate (the only holdout read) must pass  -> ops.gate_results
   3. a human approval row must exist                          -> ops.approvals  (`lau approve`)
   4. the PROMOTER identity copies the model version into <catalog>.<production>.pd_model, sets
-     champion_<v8> (and `champion`, the serving alias, only if the version is the active definition),
-     and writes production.promotions.
+     champion_<v8>, and writes production.promotions.
+  5. shadow first: for the active definition the new champion starts a rollout in shadow (lau.decision.rollout).
+     It scores live decisions next to what serves and decides nothing until `lau rollout serve` (with its own
+     approvals) moves `champion`, the serving alias. Rollback is one action: `lau rollout rollback`.
 Champions are never deleted. When the definition changes, old champions are tagged
 superseded_by_definition_change=true but keep serving until a new champion is approved.
 """
@@ -44,12 +46,29 @@ def required_reports(store, candidate_ref: str, version: str) -> dict[str, dict 
     return out
 
 
+def gate_decisions(store, candidate_ref: str, gate_id: str) -> list[dict]:
+    """Every human decision recorded on one gate result, oldest first."""
+    if not store.table_exists("ops", "approvals"):
+        return []
+    ref, gid = candidate_ref.replace("'", "''"), gate_id.replace("'", "''")
+    df = store.query(
+        f"SELECT approval_id, approver, decision, rationale, ts FROM {store.fq('ops', 'approvals')} "
+        f"WHERE candidate_ref = '{ref}' AND gate_id = '{gid}' ORDER BY ts"
+    )
+    return df.to_dict("records") if len(df) else []
+
+
 def record_approval(
     candidate_ref: str, decision: str, rationale: str, gate_id: str, version: str, approver: str | None = None
 ) -> str:
+    from lau.governance.approvals import ApprovalError
+
     if decision not in ("approve", "reject"):
         raise ValueError("decision must be approve|reject")
     st = get_store("harness")
+    who = approver or getpass.getuser()
+    if any(str(r["approver"]) == who for r in gate_decisions(st, candidate_ref, gate_id)):
+        raise ApprovalError(f"{who} has already recorded a decision on this gate result")
     approval_id = f"apr-{uuid.uuid4().hex[:10]}"
     st.write_df(
         "ops",
@@ -61,7 +80,7 @@ def record_approval(
                     "candidate_ref": candidate_ref,
                     "definition_version": version,
                     "decision": decision,
-                    "approver": approver or getpass.getuser(),
+                    "approver": who,
                     "rationale": rationale[:4000],
                     "gate_id": gate_id,
                     "ts": datetime.now(UTC),
@@ -101,9 +120,17 @@ def promote(candidate_mv: str, log=print) -> dict:
     gate = latest_gate(reader, ref)
     if not gate or not gate["passed"] or gate["definition_version"] != version:
         raise PromotionBlockedError("no passing harness gate for this candidate and definition version")
+    from lau.governance.approvals import required, tally
+
+    decisions = tally(gate_decisions(reader, ref, gate["gate_id"]))
+    if decisions["rejected_by"]:
+        raise PromotionBlockedError(f"rejected by {', '.join(decisions['rejected_by'])} on the latest gate result")
+    need = required("promotion")
+    if decisions["count"] < need:
+        raise PromotionBlockedError(
+            f"{decisions['count']} of {need} required approvals recorded for this candidate's latest gate result"
+        )
     approval = latest_approval(reader, ref)
-    if not approval or approval["decision"] != "approve" or approval["gate_id"] != gate["gate_id"]:
-        raise PromotionBlockedError("no human approval recorded for this candidate's latest gate result")
 
     prod = registry_io.production_model_name()
     with registry_io.mlflow_session("promoter") as c:
@@ -131,9 +158,6 @@ def promote(candidate_mv: str, log=print) -> dict:
         except Exception:  # noqa: BLE001, S110 - no previous champion for this definition
             pass
         c.set_registered_model_alias(prod, registry_io.champion_alias(version), mv.version)
-        serving = version == active_version(reader)
-        if serving:
-            c.set_registered_model_alias(prod, registry_io.SERVING_ALIAS, mv.version)
     promo = {
         "promotion_id": f"promo-{uuid.uuid4().hex[:10]}",
         "ts": datetime.now(UTC),
@@ -141,17 +165,52 @@ def promote(candidate_mv: str, log=print) -> dict:
         "production_model_version": str(mv.version),
         "candidate_model_version": candidate_mv,
         "previous_champion_version": None if prev is None else str(prev.version),
-        "serving": serving,
+        "serving": False,  # serving starts only when its rollout is served (shadow first)
         "approval_id": approval["approval_id"],
         "gate_id": gate["gate_id"],
         "reports_json": json.dumps({k: v["report_id"] for k, v in reports.items()}),
     }
     get_store("promoter").write_df("production", "promotions", pd.DataFrame([promo]), mode="append")
+    rollout_id = None
+    if version == active_version(reader):
+        from lau.decision import rollout
+
+        rollout_id = rollout.start(str(mv.version), version, promo["promotion_id"])["rollout_id"]
     log(
         f"promoted candidate v{candidate_mv} -> {prod} v{mv.version} as {registry_io.champion_alias(version)}"
-        + (" and SERVING" if serving else " (not serving: definition not active)")
+        + (
+            f"; rollout {rollout_id} scores in shadow until `lau rollout serve {rollout_id}`"
+            if rollout_id
+            else " (no rollout: its definition is not active)"
+        )
     )
-    return promo
+    _after_promotion(log, rebuild=rollout_id is not None)
+    return {**promo, "rollout_id": rollout_id}
+
+
+def _after_promotion(log=print, rebuild: bool = False) -> None:
+    """Recompute the evidence (champions changed) and refresh the console snapshot. Best effort.
+
+    rebuild: also rebuild the decision model, so the new champion starts scoring in shadow (needs an active policy).
+    """
+    from lau.console.snapshot import publish_quietly
+    from lau.evidence.config import load_benchmark_config
+
+    if rebuild:
+        try:
+            from lau.decision import build
+
+            build.publish(log=log)
+        except Exception as e:  # noqa: BLE001 - e.g. no approved policy yet; `lau decision status` shows the gap
+            log(f"note: the decision model was not rebuilt ({type(e).__name__}: {str(e)[:160]})")
+    try:
+        if load_benchmark_config().refresh.after_promotion:
+            from lau.evidence.run import run_all
+
+            run_all(log=log)
+    except Exception as e:  # noqa: BLE001 - the daily evidence job catches up
+        log(f"warning: evidence refresh after the promotion failed ({type(e).__name__}: {str(e)[:160]})")
+    publish_quietly("promotion", log_fn=log)
 
 
 def mark_superseded(new_version: str) -> int:

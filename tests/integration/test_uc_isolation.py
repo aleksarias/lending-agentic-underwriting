@@ -12,9 +12,37 @@ import pytest
 
 pytestmark = pytest.mark.integration
 
-DENY = [("holdout", "oot_labels"), ("labels", "labels_all"), ("raw", "protected_attributes"),
-        ("raw", "performance"), ("curated", "applications"), ("ops", "pipeline_state"), ("ops", "active_definition")]
-ALLOW = [("labels", "labels_active"), ("curated", "applications_dev"), ("curated", "data_catalog")]
+DENY = [
+    ("holdout", "oot_labels"),
+    ("labels", "labels_all"),
+    ("raw", "protected_attributes"),
+    ("raw", "performance"),
+    ("curated", "applications"),
+    ("ops", "pipeline_state"),
+    ("raw", "bank_transactions"),
+    ("curated", "cashflow_monthly"),
+    ("ops", "active_definition"),
+]
+ALLOW = [
+    ("labels", "labels_active"),
+    ("curated", "applications_dev"),
+    ("curated", "data_catalog"),
+    ("curated", "cashflow_monthly_dev"),
+]
+# The Underwriting Console's read-only identity: metadata and aggregates only.
+UI_DENY = [
+    ("raw", "performance"),
+    ("holdout", "oot_labels"),
+    ("labels", "labels_all"),
+    ("curated", "applications"),
+    ("curated", "cashflow_monthly"),
+]
+UI_ALLOW = [
+    ("ops", "cycles"),
+    ("curated", "data_catalog"),
+    ("labels", "split_meta"),
+    ("experiments", "reports"),
+]
 DENIED_CODES = ("INSUFFICIENT_PERMISSIONS", "PERMISSION_DENIED")
 
 
@@ -35,6 +63,14 @@ def _store(role, s):
     from lau.store import DatabricksStore
 
     return DatabricksStore(role, s)
+
+
+def _ui_store(s):
+    from lau.credentials import has_role_credentials
+
+    if not has_role_credentials("ui"):
+        pytest.skip("ui service principal credentials are not in .env (run `lau init`)")
+    return _store("ui", s)
 
 
 @pytest.mark.parametrize("schema,table", DENY)
@@ -86,3 +122,46 @@ def test_agent_cannot_write_production(real_settings):
         assert any(c in str(ei.value) for c in DENIED_CODES)
     finally:
         st.close()
+
+
+@pytest.mark.parametrize("schema,table", UI_DENY)
+def test_ui_denied_by_unity_catalog(real_settings, schema, table):
+    st = _ui_store(real_settings)
+    try:
+        with pytest.raises(Exception) as ei:
+            st._query(f"SELECT * FROM {real_settings.fq(schema, table)} LIMIT 1")
+        assert any(c in str(ei.value) for c in DENIED_CODES), str(ei.value)[:300]
+    finally:
+        st.close()
+
+
+@pytest.mark.parametrize("schema,table", UI_ALLOW)
+def test_ui_reads_what_the_console_needs(real_settings, schema, table):
+    st = _ui_store(real_settings)
+    try:
+        df = st._query(f"SELECT * FROM {real_settings.fq(schema, table)} LIMIT 1")  # raises if Unity Catalog denies
+        assert list(df.columns)
+    finally:
+        st.close()
+
+
+@pytest.mark.parametrize("schema,table", [("ops", "cycles"), ("experiments", "reports")])
+def test_ui_cannot_write(real_settings, schema, table):
+    """`WHERE 1 = 0` deletes nothing even if the grant were wrong, so the probe is safe to run."""
+    st = _ui_store(real_settings)
+    try:
+        with pytest.raises(Exception) as ei:
+            st._query(f"DELETE FROM {real_settings.fq(schema, table)} WHERE 1 = 0")
+        assert any(c in str(ei.value) for c in DENIED_CODES), str(ei.value)[:300]
+    finally:
+        st.close()
+
+
+def test_recorded_access_probes_agree_with_unity_catalog(real_settings):
+    """The probes behind `lau check-access` (and ops.access_checks) must all come out as expected on the workspace."""
+    from lau.governance.access_checks import run_access_checks
+
+    rows = run_access_checks(write=False)
+    if not rows:
+        pytest.skip("no role credentials in .env")
+    assert not [r for r in rows if not r["ok"]], [(r["role"], r["object"], r["expected"], r["observed"]) for r in rows]

@@ -1,0 +1,13 @@
+# Closing the loop: the simulated servicer's loan status feed, its ingestion, production labels and evidence.
+servicer:                         # the simulated servicer (simulation schema; harness only)
+  take_up_rate: 0.85              # approved applicants who book the loan
+  referral_approval_rate: 0.5     # referrals the simulated underwriter approves
+  misreport_rate: 0.01            # status records first reported wrong; the correct value follows in the next feed
+  malformed_rate: 0.002           # records broken on purpose: the feed's expectations must quarantine them
+
+feed:
+  max_quarantine_share: 0.05      # a feed file with a larger share of bad records is held back whole, and alerts
+
+production:
+  min_matured_for_auc: 100        # matured loans (with both outcomes) before ranking quality is reported
+  min_new_matured_to_queue: 200   # newly matured production loans that queue an improvement cycle

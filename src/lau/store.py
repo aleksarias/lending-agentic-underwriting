@@ -280,6 +280,9 @@ class DatabricksStore(Store):
         self.cfg = databricks_config(role)
         self.w = WorkspaceClient(config=self.cfg)
         self._conn = None
+        # One statement at a time per identity: agent tools run in worker threads (parallel tool calls) and the
+        # orchestrator's liveness writer runs beside them; the SQL connection is not shared concurrently.
+        self._lock = threading.RLock()
         if not self.s.state.warehouse_id:
             raise RuntimeError("No warehouse_id in .lau/workspace_state.json; run `lau init` first.")
 
@@ -304,11 +307,12 @@ class DatabricksStore(Store):
     def _run(self, sql: str, fetch: bool):
         from lau import cost
 
-        t0 = time.time()
-        with self.conn.cursor() as cur:
-            cur.execute(sql)
-            result = cur.fetchall_arrow().to_pandas() if fetch else None
-        cost.record_warehouse_seconds(time.time() - t0)
+        with self._lock:
+            t0 = time.time()
+            with self.conn.cursor() as cur:
+                cur.execute(sql)
+                result = cur.fetchall_arrow().to_pandas() if fetch else None
+            cost.record_warehouse_seconds(time.time() - t0)
         return result
 
     def table_exists(self, key: str, table: str) -> bool:
@@ -337,16 +341,20 @@ class DatabricksStore(Store):
         src = f"(SELECT * EXCEPT (_rescued_data) FROM read_files('{folder}/', format => 'parquet'))"
         fq = self.fq(key, table)
         try:
-            if mode == "overwrite" or not self.table_exists(key, table):
-                self._execute(f"CREATE OR REPLACE TABLE {fq} AS SELECT * FROM {src}")
-            else:
-                self._execute(f"INSERT INTO {fq} BY NAME SELECT * FROM {src}")
+            with self._lock:  # the existence check and the write belong together
+                self._create_or_insert(key, table, fq, src, mode)
         finally:
             try:
                 self.w.files.delete(path)
                 self.w.files.delete_directory(folder)
             except Exception:  # noqa: BLE001, S110 - best-effort cleanup of the staging file
                 pass
+
+    def _create_or_insert(self, key: str, table: str, fq: str, src: str, mode: str) -> None:
+        if mode == "overwrite" or not self.table_exists(key, table):
+            self._execute(f"CREATE OR REPLACE TABLE {fq} AS SELECT * FROM {src}")
+        else:
+            self._execute(f"INSERT INTO {fq} BY NAME SELECT * FROM {src}")
 
 
 _STORES: dict[tuple[str, str], Store] = {}

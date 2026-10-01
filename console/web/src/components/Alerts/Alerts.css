@@ -1,0 +1,6 @@
+/* Alerts screen. Class names start with "alerts-". */
+.alerts-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 10px 16px; }
+.alerts-main { flex: 1 1 320px; min-width: 0; display: grid; gap: 5px; }
+.alerts-title { font-weight: 600; }
+.alerts-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: var(--fs-xs); color: var(--muted); }
+.alerts-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }

@@ -1,0 +1,7 @@
+/* Approvals screen. Class names start with "approvals-". */
+.approvals-rationale { min-width: 240px; max-width: 560px; display: grid; gap: 4px; justify-items: start; }
+.approvals-rationale-text { white-space: pre-wrap; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.approvals-rationale-text.open { display: block; -webkit-line-clamp: unset; line-clamp: unset; overflow: visible; }
+.approvals-raw { white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-mono); font-size: 12px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px 10px; margin: 0; max-width: 100%; }
+.approvals-more { font: inherit; font-size: 12px; background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; }
+.approvals-more:hover { text-decoration: underline; }

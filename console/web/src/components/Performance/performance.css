@@ -1,0 +1,8 @@
+/* Performance screens (and the multiple-testing ledger chart). Class names are prefixed with "performance-". Tokens only. */
+
+.performance-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: var(--fs-xs); color: var(--muted); margin-top: 8px; }
+.performance-legend > span { display: inline-flex; align-items: center; gap: 6px; }
+
+.performance-explain { display: grid; gap: 9px; font-size: var(--fs-sm); }
+.performance-explain p { margin: 0; }
+.performance-formula { font-family: var(--font-mono); font-size: 12px; background: var(--surface-2); border: 1px solid var(--line); padding: 6px 9px; border-radius: var(--radius-sm); overflow-wrap: anywhere; }

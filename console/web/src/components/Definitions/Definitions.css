@@ -1,0 +1,4 @@
+/* Definitions screens (list and detail). Colors only through the design tokens; class names are prefixed with the screen name. */
+.definitions-strong { font-weight: 700; }
+/* A definition badge never wraps on its own; in a narrow cell or card it has to. */
+.definitions-wrap .badge { white-space: normal; }

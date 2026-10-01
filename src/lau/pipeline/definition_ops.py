@@ -2,7 +2,8 @@
 
 plan   : diff vs the active version, affected stages, estimated cost, label-rate impact (computed in memory).
 apply  : requires explicit confirmation (interactive) or a recorded approval for that exact hash (CI/job path);
-         registers + activates the version, marks other versions' champions superseded, rebuilds stale stages.
+         registers + activates the version, marks other versions' champions superseded, records changed config
+         versions (`ops.config_versions`), rebuilds stale stages.
 compare: builds another definition side by side (no activation) and writes a comparison report.
 """
 
@@ -17,7 +18,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from lau import cost
+from lau import cost, versioning
 from lau.definition import registry
 from lau.definition.hashing import definition_version, short
 from lau.definition.label_builder import build_labels, label_summary
@@ -174,6 +175,14 @@ def apply(
                 log("Aborted by user.")
                 return {"version": p.version, "ran": [], "aborted": True}
             approval_id = registry.record_approval(st, p.version, text)
+        from lau.governance.approvals import required
+
+        have, need = len(registry.approvers(st, p.version)), required("definition")
+        if have < need:
+            raise ApprovalRequiredError(
+                f"{have} of {need} required approvals for {p.version}: another person must run "
+                "`lau default-definition plan --approve` before it can be applied"
+            )
     if p.stale:
         est = cost.estimate_stages(p.stale, include_agents=run_cycle and "improvement_cycle" in p.stale)
         cost.check_monthly_cap(est.total_usd)
@@ -186,6 +195,7 @@ def apply(
 
         n = mark_superseded(new_version=p.version)
         log(f"marked {n} champion(s) of other definitions as superseded_by_definition_change (kept, not deleted)")
+    versioning.try_record_config_versions(f"definition apply {p.version}", recorded_by=user, log=log)
 
     ctx = _ctx(defn, True, run_cycle, log)
     ctx.previous_version = previous if previous != p.version else None

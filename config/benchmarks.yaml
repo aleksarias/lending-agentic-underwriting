@@ -1,0 +1,22 @@
+# Frozen benchmark definitions for the benchmark ledger (append-only: add new keys, never edit existing ones).
+# Every registered model and the frozen reference are re-scored under each of these on the same loans.
+base_definition: definitions/dpd90_ever_12m.yaml   # all non-threshold fields come from this file
+benchmarks:
+  - {key: dpd30_ever_12m, dpd: 30}
+  - {key: dpd60_ever_12m, dpd: 60}
+  - {key: dpd90_ever_12m, dpd: 90}
+primary: dpd60_ever_12m
+# The frozen reference never changes. legacy_score: higher = lower risk, so risk score = -legacy_score.
+reference: {key: legacy_score, column: legacy_score, direction: higher_is_safer, label: Legacy policy score (frozen)}
+window:
+  # "validation": the active definition's validation months (models may have been selected on it: flagged).
+  # "latest_matured_excluding_holdout": most recent fully matured months that are not in any holdout.
+  policy: validation
+  months: 5
+bootstrap: {resamples: 400, seed: 0, level: 0.95}
+fixed_approval_rate: 0.70
+
+# Recompute the evidence at the end of every improvement cycle and after every promotion (the daily job also runs it).
+refresh:
+  after_cycle: true
+  after_promotion: true

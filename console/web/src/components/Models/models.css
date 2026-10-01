@@ -1,0 +1,52 @@
+/* Models screen, plus small building blocks reused by Performance, Fairness, Data and their detail screens.
+   Class names are prefixed with "models-". Colors come only from tokens. */
+
+.models-toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 16px; }
+.models-toolbar label.field select,
+.models-toolbar label.field input { min-width: 11rem; max-width: 100%; }
+.models-toolbar .grow { flex: 1 1 14rem; }
+
+.models-defselect { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.models-defselect select { max-width: 100%; }
+
+.models-legend { font-size: var(--fs-sm); color: var(--muted); }
+.models-legend summary { cursor: pointer; }
+.models-legend dl { margin: 8px 0 0; display: grid; grid-template-columns: fit-content(40%) minmax(0, 1fr); gap: 4px 12px; }
+.models-legend dd { margin: 0; }
+
+.models-group-note { font-size: var(--fs-sm); color: var(--muted); }
+.models-cell-sub { display: block; font-size: var(--fs-xs); color: var(--muted); }
+.models-aliases { display: flex; flex-wrap: wrap; gap: 4px; }
+.models-aliases code { overflow-wrap: anywhere; }
+
+.models-chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 0; padding: 0; list-style: none; }
+.models-chip {
+  display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line); border-radius: 6px;
+  padding: 1px 7px; background: var(--surface-2); font-family: var(--font-mono); font-size: 12px; color: var(--ink);
+}
+a.models-chip { color: var(--accent); }
+a.models-chip:hover { border-color: var(--accent); text-decoration: none; }
+.models-chip .tag { font-family: var(--font-body); font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+
+/* Horizontal bars with exact values: the bar is a picture, the number is the evidence.
+   One grid per chart keeps every bar aligned; a container query stacks the rows when the chart is narrow. */
+.models-hbars-wrap { container-type: inline-size; min-width: 0; }
+.models-hbars { display: grid; grid-template-columns: fit-content(14rem) minmax(0, 1fr) auto; align-items: center; gap: 8px 10px; font-size: var(--fs-sm); }
+.models-hbar { display: contents; }
+.models-hbar .label { overflow-wrap: anywhere; min-width: 0; }
+.models-hbar .track { position: relative; height: 12px; background: var(--surface-3); border-radius: 4px; }
+.models-hbar .fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: var(--accent); }
+.models-hbar .fill.good { background: var(--good); }
+.models-hbar .fill.warn { background: var(--warn); }
+.models-hbar .fill.crit { background: var(--crit); }
+.models-hbar .fill.muted { background: var(--faint); }
+.models-hbar .tick { position: absolute; top: -4px; bottom: -4px; width: 0; border-left: 2px dashed var(--ink); opacity: 0.75; }
+.models-hbar .val { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.models-hbar .note { grid-column: 2 / -1; margin-top: -5px; font-size: var(--fs-xs); color: var(--muted); }
+.models-hbars-foot { font-size: var(--fs-xs); color: var(--muted); margin-top: 8px; }
+@container (max-width: 400px) {
+  .models-hbars { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .models-hbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; }
+  .models-hbar .track { grid-column: 1 / -1; order: 3; }
+  .models-hbar .note { grid-column: 1 / -1; order: 4; margin-top: 0; }
+}

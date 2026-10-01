@@ -606,6 +606,14 @@ def curator_tools(ctx: CycleContext) -> list:
         new = lessons_mod.add_lessons(entries, ctx.version)
         return {"added": [le.line() for le in new]}
 
+    def unverified(a: dict) -> dict:
+        pending = f"unverified-under-{ctx.version[:8]}"
+        return {"lessons": [le.line() for le in lessons_mod.read_lessons() if le.status == pending][:40]}
+
+    def reverify(a: dict) -> dict:
+        changed = lessons_mod.set_statuses(a["updates"][:20], ctx.version)
+        return {"changed": changed}
+
     return [
         wrap(
             ctx,
@@ -622,6 +630,41 @@ def curator_tools(ctx: CycleContext) -> list:
             "Current LESSONS.md entries relevant to this definition.",
             obj_schema({}),
             lambda a: lessons_mod.lessons_for_prompt(ctx.version),
+        ),
+        wrap(
+            ctx,
+            role,
+            "list_unverified_lessons",
+            "Lessons carried over from an earlier definition of default that still need re-checking under this one.",
+            obj_schema({}),
+            unverified,
+        ),
+        wrap(
+            ctx,
+            role,
+            "reverify_lessons",
+            "Mark carried-over lessons as active (this cycle's evidence supports them under the current "
+            "definition) or retired (it contradicts them). Only lessons flagged unverified can change; give the "
+            "evidence in reason.",
+            obj_schema(
+                {
+                    "updates": A(
+                        "decisions",
+                        {
+                            "type": "object",
+                            "properties": {
+                                "id": S("lesson id, e.g. L-3f2ab6"),
+                                "status": S("active or retired", enum=["active", "retired"]),
+                                "reason": S("the evidence from this cycle"),
+                            },
+                            "required": ["id", "status", "reason"],
+                        },
+                        maxItems=20,
+                    )
+                }
+            ),
+            reverify,
+            state_changing=True,
         ),
         wrap(
             ctx,

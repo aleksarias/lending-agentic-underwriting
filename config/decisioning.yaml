@@ -1,0 +1,24 @@
+# Real-time decisioning: the decision model, its Model Serving endpoint and the synthetic traffic that exercises it.
+# The policy (cut-offs, knock-outs, bands) is NOT here: it is config/policy.yaml, versioned and approval-gated.
+decision_model: decision_model      # registered in <catalog>.<production> by the promoter identity
+experiment_path: /Shared/lau/decision_models   # build runs; agents have no access (created by `lau init`)
+
+endpoint:
+  name: lau-decision
+  workload_size: Small              # smallest CPU size (up to 4 concurrent requests)
+  scale_to_zero: true               # no charge while idle; the first request after idle waits for a cold start
+  inference_table_prefix: lau_decision   # AI Gateway inference table <catalog>.<ops>.lau_decision_payload
+
+timeout_ms: 250                     # scoring budget per call; past it the legacy policy decides (logged as fallback)
+
+targets:                            # release check: client-side latency per single-application request
+  p95_ms: 300
+  p99_ms: 800
+
+traffic:                            # synthetic origination (task in the daily job)
+  months_per_run: 1                 # simulated months per run: one simulated month of applications per real day
+  applications_per_month: 1500      # about the training data's recent monthly volume
+  batch_size: 50                    # applications per call
+
+rollout:
+  min_shadow_decisions: 200         # a promoted champion scores at least this many live decisions in shadow first

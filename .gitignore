@@ -49,3 +49,12 @@ anthropic_token*
 *.log
 *.bak
 reports/demo/
+
+# Console front end
+console/web/node_modules/
+console/web/dist/
+console/web/*.tsbuildinfo
+
+# Playwright
+console/web/test-results/
+console/web/playwright-report/

@@ -1,0 +1,25 @@
+/* Definition detail screen. Colors only through the design tokens; class names are prefixed with the screen name. */
+.definition-detail-bars { margin: 0; display: grid; gap: 8px; }
+.definition-detail-bar-row {
+  display: grid; grid-template-columns: minmax(110px, 190px) minmax(40px, 1fr) auto; gap: 10px; align-items: center; font-size: var(--fs-sm);
+}
+.definition-detail-bar-value { text-align: right; white-space: nowrap; }
+
+.definition-detail-strip { display: flex; gap: 4px; }
+.definition-detail-seg {
+  min-width: 76px; padding: 8px 10px; border-radius: var(--radius-sm);
+  border-top: 4px solid var(--seg); background: color-mix(in srgb, var(--seg) 14%, var(--surface));
+}
+.definition-detail-seg.train { --seg: var(--s4); }
+.definition-detail-seg.validation { --seg: var(--s3); }
+.definition-detail-seg.oot { --seg: var(--s2); }
+.definition-detail-note { max-width: 90ch; }
+.definition-detail-wrap .badge { white-space: normal; }
+/* Stages are a short list; the runs table needs the wider column. */
+.definition-detail-pipeline { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: var(--gap); align-items: start; }
+@media (max-width: 900px) { .definition-detail-pipeline { grid-template-columns: minmax(0, 1fr); } }
+/* On a phone the bar goes under its label so it stays readable. */
+@media (max-width: 520px) {
+  .definition-detail-bar-row { grid-template-columns: minmax(0, 1fr) auto; row-gap: 4px; }
+  .definition-detail-bar-row .bar-track { grid-column: 1 / -1; grid-row: 2; }
+}

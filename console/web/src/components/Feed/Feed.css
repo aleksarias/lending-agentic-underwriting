@@ -1,0 +1,6 @@
+/* Loan status feed screen. Class names start with "feed-". */
+.feed-reading { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; font-size: var(--fs-sm); }
+.feed-excl { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: var(--fs-xs); color: var(--muted); }
+.feed-excl span { white-space: nowrap; }
+.feed-excl b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.feed-th-sub { display: block; font-size: 11px; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--muted); }

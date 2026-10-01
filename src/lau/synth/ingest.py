@@ -32,6 +32,12 @@ def gen_data(n_applications: int | None = None, seed: int | None = None, log=pri
     st.write_df("raw", "protected_attributes", d.protected, mode="overwrite")
     st.write_df("raw", "field_lineage", d.field_lineage, mode="overwrite")
     st.write_df("raw", "new_applications_raw", d.new_applications, mode="overwrite")
+    if len(d.transactions):
+        st.write_df("raw", "bank_transactions", d.transactions, mode="overwrite")
+        log(
+            f"raw.bank_transactions: {len(d.transactions):,} rows "
+            f"({d.ground_truth['cashflow']['post_decision_rows_in_raw']:,} post-decision, never used as features)"
+        )
     dv = data_version(cfg, n)
     st.write_df(
         "ops",

@@ -110,5 +110,29 @@ def write_performance(store, perf: pd.DataFrame, version: str) -> None:
     )
 
 
+# Lifecycle: proposed (by an agent) -> screened (passes the leakage and proxy screen under the active definition) or
+# rejected_screen (fails it). A person's rejection ("rejected") is final. "Used" is derived from evaluations.
+SCREENABLE = ("proposed", "screened", "rejected_screen")
+
+
+def screen_statuses(store, perf: pd.DataFrame) -> dict[str, int]:
+    """Set each screened feature's status from this definition's screen, in one statement."""
+    if perf.empty:
+        return {"screened": 0, "rejected_screen": 0}
+    bad = perf[(perf["leakage_risk"] == "high") | (perf["proxy_risk"] == "high")]["name"].tolist()
+    good = [n for n in perf["name"].tolist() if n not in bad]
+
+    def names(xs: list[str]) -> str:
+        return ", ".join("'" + str(x).replace("'", "''") + "'" for x in xs) or "''"
+
+    allowed = ", ".join(f"'{x}'" for x in SCREENABLE)
+    store.execute(
+        f"UPDATE {store.fq('feature_registry', 'features')} SET status = CASE "
+        f"WHEN name IN ({names(bad)}) THEN 'rejected_screen' WHEN name IN ({names(good)}) THEN 'screened' "
+        f"ELSE status END WHERE status IN ({allowed})"
+    )
+    return {"screened": len(good), "rejected_screen": len(bad)}
+
+
 def set_status(store, name: str, status: str) -> None:
     store.execute(f"UPDATE {store.fq('feature_registry', 'features')} SET status = '{status}' WHERE name = '{name}'")

@@ -1,0 +1,24 @@
+/* Compare screen. Colors only through the design tokens; class names are prefixed with the screen name. */
+.compare-controls { display: grid; gap: 12px; }
+.compare-dates { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 18px; }
+.compare-dates .field { min-width: 0; }
+.compare-presets { display: flex; flex-wrap: wrap; gap: 8px; }
+.compare-preset {
+  font: inherit; text-align: left; display: grid; gap: 1px; max-width: 100%;
+  padding: 7px 12px; border-radius: var(--radius-sm); border: 1px solid var(--line);
+  background: var(--surface); color: var(--ink); cursor: pointer;
+}
+.compare-preset:hover { border-color: var(--accent); }
+.compare-preset[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); }
+.compare-preset-label { font-size: var(--fs-sm); font-weight: 600; }
+.compare-preset[aria-pressed="true"] .compare-preset-label { color: var(--accent); }
+/* A definition badge never wraps on its own; in a narrow table cell it has to. */
+.compare-table .badge { white-space: normal; }
+.compare-sub { margin: 4px 0 0; font-family: var(--font-body); font-size: var(--fs-md); font-weight: 600; }
+/* Both tables share column widths so the core and configuration rows line up; narrow screens scroll the table. */
+table.compare-vector { table-layout: fixed; min-width: 680px; }
+table.compare-vector th:nth-child(1) { width: 25%; }
+table.compare-vector th:nth-child(2) { width: 25%; }
+table.compare-vector th:nth-child(3) { width: 27%; }
+table.compare-vector th:nth-child(4) { width: 14%; }
+table.compare-vector th:nth-child(5) { width: 9%; }

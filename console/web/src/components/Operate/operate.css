@@ -1,0 +1,9 @@
+/* Styles for the helpers shared by the Decide and operate screens. Class names start with "operate-". */
+.operate-notbuilt { border-style: dashed; display: grid; gap: 12px; }
+.operate-notbuilt > .operate-lead { margin: 0; }
+.operate-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 14px 28px; }
+.operate-h { font-family: var(--font-body); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin: 0 0 6px; }
+.operate-list { margin: 0; padding-left: 18px; display: grid; gap: 7px; font-size: var(--fs-sm); }
+.operate-list li::marker { color: var(--faint); }
+.operate-list .detail { display: block; color: var(--muted); font-size: var(--fs-xs); line-height: 1.45; }
+.operate-note { border-left: 3px solid var(--line); padding: 2px 0 2px 12px; }

@@ -6,6 +6,8 @@ bundle:
 variables:
   harness_sp:
     description: Application ID of the lau-harness service principal (see .lau/workspace_state.json)
+  ui_sp:
+    description: Application ID of the lau-ui service principal (the console's read-only identity)
   environment_version:
     description: Serverless environment version (v3-v5 = Python 3.12, matching the local toolchain)
     default: "4"
@@ -18,6 +20,17 @@ artifacts:
 
 include:
   - resources/*.yml
+
+# Jobs read workspace ids (warehouse, catalog, service principals; no secrets) from the git-ignored state file.
+sync:
+  include:
+    - .lau/workspace_state.json
+
+# The jobs run as the harness service principal, which must read the deployed wheel in the bundle's workspace folder
+# (top-level permissions also apply to that folder).
+permissions:
+  - level: CAN_VIEW
+    service_principal_name: ${var.harness_sp}
 
 targets:
   dev:

@@ -21,6 +21,31 @@ from rich.table import Table  # noqa: E402
 app = typer.Typer(no_args_is_help=True, add_completion=False, help=__doc__)
 dd = typer.Typer(no_args_is_help=True, help="Default-definition lifecycle (plan | apply | compare).")
 app.add_typer(dd, name="default-definition")
+
+
+def _mount_evidence() -> None:
+    from lau.evidence.cli import app as evidence_app
+
+    app.add_typer(evidence_app, name="evidence")
+
+
+_mount_evidence()
+
+
+def _mount_decision() -> None:
+    from lau.decision.cli import decision_app, feed_app, policy_app, rollout_app
+
+    app.add_typer(policy_app, name="policy")
+    app.add_typer(decision_app, name="decision")
+    app.add_typer(rollout_app, name="rollout")
+    app.add_typer(feed_app, name="feed")
+
+
+_mount_decision()
+versions = typer.Typer(
+    no_args_is_help=True, help="Version ledger for config, prompts, grants and code (show | record)."
+)
+app.add_typer(versions, name="versions")
 console = Console()
 
 
@@ -45,15 +70,19 @@ def _guard(fn, *a, **kw):
 # ---------------------------------------------------------------------------------------------------------
 @app.command("check-access")
 def check_access() -> None:
-    """Read-only: verify each identity and the platform-level isolation (agent denied on holdout)."""
+    """Verify each identity, then probe isolation as agent, ui and promoter; results go to ops.access_checks.
+
+    Exits 1 if any probe is not as expected (a read that should be denied, a denial that should be a read, or a
+    probe that could not tell).
+    """
     from databricks.sdk import WorkspaceClient
+    from rich.markup import escape
 
     from lau.credentials import databricks_config, has_role_credentials
-    from lau.settings import get_settings
+    from lau.governance.access_checks import record_access_checks, run_access_checks
 
-    s = get_settings()
     t = Table("role", "identity", "status")
-    for role in ("admin", "harness", "agent", "promoter"):
+    for role in ("admin", "harness", "agent", "promoter", "ui"):
         if not has_role_credentials(role):
             t.add_row(role, "-", "no credentials in .env" + (" (run `lau init`)" if role != "admin" else ""))
             continue
@@ -63,21 +92,24 @@ def check_access() -> None:
         except Exception as e:  # noqa: BLE001
             t.add_row(role, "-", f"error: {str(e)[:80]}")
     console.print(t)
-    if s.project.backend == "databricks" and s.state.warehouse_id and has_role_credentials("agent"):
-        from lau.store import DatabricksStore
-
-        st = DatabricksStore("agent", s)
-        try:
-            st._query(f"SELECT * FROM {s.fq('holdout', 'oot_labels')} LIMIT 1")
-            console.print("[red]✗ agent principal CAN read holdout — isolation broken[/red]")
-        except Exception as e:  # noqa: BLE001
-            ok = any(k in str(e) for k in ("PERMISSION_DENIED", "INSUFFICIENT_PERMISSIONS", "does not have"))
-            console.print(
-                "[green]✓[/green] agent denied on holdout by Unity Catalog"
-                if ok
-                else f"[yellow]? agent holdout query failed for another reason: {str(e)[:160]}[/yellow]"
-            )
-        st.close()
+    rows = _guard(run_access_checks, False)
+    if not rows:
+        _log("no access probes ran (workspace not initialised, or no role credentials in .env)")
+        return
+    pt = Table("role", "object", "expected", "observed", "result")
+    for r in rows:
+        result = "[green]ok[/green]" if r["ok"] else f"[red]FAIL[/red] {escape(r['detail'][:70])}"
+        pt.add_row(r["role"], r["object"], r["expected"], r["observed"], result)
+    console.print(pt)
+    try:
+        record_access_checks(rows)
+    except Exception as e:  # noqa: BLE001
+        console.print(f"[yellow]? results not recorded in ops.access_checks: {escape(str(e)[:160])}[/yellow]")
+    failed = [r for r in rows if not r["ok"]]
+    if failed:
+        console.print(f"[red]✗ {len(failed)} of {len(rows)} access checks failed[/red]")
+        raise typer.Exit(1)
+    console.print(f"[green]✓[/green] all {len(rows)} access checks ok ({', '.join(sorted({r['role'] for r in rows}))})")
 
 
 @app.command()
@@ -131,6 +163,21 @@ def dd_plan(
             _log(f"approval recorded: {aid}")
 
 
+@dd.command("approve")
+def dd_approve(
+    version: str = typer.Argument(..., help="the exact hash of config/default_definition.yaml"),
+    note: str = typer.Option(..., "--note", help="what you checked"),
+    approver: str = typer.Option("", "--approver", help="who approves (default: the OS user)"),
+    as_json: bool = typer.Option(False, "--json", help="print one JSON ActionResult line"),
+) -> None:
+    """Record a person's approval of the YAML definition's exact hash (two-person rule; the console uses this)."""
+    import getpass
+
+    from lau.console import actions
+
+    _action_done(_guard(actions.definition_approve, version, note, approver or getpass.getuser()), as_json)
+
+
 @dd.command("apply")
 def dd_apply(
     yes: bool = typer.Option(False, "--yes", help="Confirm non-interactively (you are the approver)."),
@@ -166,6 +213,38 @@ def dd_compare(other: Path = typer.Argument(..., help="YAML of the other definit
 
 
 # ---------------------------------------------------------------------------------------------------------
+@versions.command("show")
+def versions_show() -> None:
+    """Current hash of every versioned component vs the latest one recorded in ops.config_versions."""
+    from lau import versioning
+
+    rows = _guard(versioning.compare)
+    t = Table("component", "current", "recorded", "state", "recorded at (UTC)")
+    color = {"same": "green", "changed": "yellow", "new": "yellow"}
+    for r in rows:
+        at = "-" if r["recorded_at"] is None else str(r["recorded_at"])[:19]
+        t.add_row(r["component"], r["current"], r["recorded"] or "-", f"[{color[r['state']]}]{r['state']}[/]", at)
+    console.print(t)
+    pending = [r["component"] for r in rows if r["state"] != "same"]
+    _log(
+        f"{len(pending)} component(s) differ from the last recorded version"
+        + ("; `lau versions record` appends them." if pending else ".")
+    )
+
+
+@versions.command("record")
+def versions_record(reason: str = typer.Option("manual", "--reason", help="why this snapshot is taken")) -> None:
+    """Append a row for every component whose hash changed since it was last recorded."""
+    import getpass
+
+    from lau import versioning
+
+    pending = [r["component"] for r in _guard(versioning.compare) if r["state"] != "same"]
+    n = _guard(versioning.record_config_versions, reason, getpass.getuser())
+    _log(f"recorded {n} component(s): {', '.join(pending)}" if n else "nothing changed since the last record")
+
+
+# ---------------------------------------------------------------------------------------------------------
 @app.command()
 def profile() -> None:
     """Run only the data-profiler agent against the active definition."""
@@ -184,6 +263,35 @@ def run_cycle(reason: str = "manual") -> None:
 
     res = _guard(run_cycle_sync, reason, _log)
     _log(json.dumps({k: v for k, v in res.items() if k not in ("steps",)}, indent=1, default=str)[:6000])
+
+
+@app.command("stop-cycle")
+def stop_cycle(
+    cycle_id: str = typer.Argument(..., help="cycle to stop, e.g. cy-202609301450-2e0e (see `lau status`)"),
+    reason: str = typer.Option("", "--reason", help="why; recorded with the request and shown in the console"),
+    by: str = typer.Option("", "--by", help="who asked (default: the OS user)"),
+    as_json: bool = typer.Option(False, "--json", help="print one JSON ActionResult line"),
+) -> None:
+    """Ask a running cycle to end gracefully before its next agent run (it finishes as stopped_by_user)."""
+    import getpass
+
+    from lau.console import actions
+    from lau.store import get_store
+
+    st = get_store("harness")
+    cid = cycle_id.replace("'", "''")
+    cyc = (
+        st.query(f"SELECT status FROM {st.fq('ops', 'cycles')} WHERE cycle_id = '{cid}'")
+        if st.table_exists("ops", "cycles")
+        else None
+    )
+    if cyc is None or cyc.empty:
+        result = {"ok": False, "message": f"unknown cycle {cycle_id}", "ref": cycle_id}
+    elif str(cyc["status"].iloc[0]) != "running":
+        result = {"ok": False, "message": f"cycle {cycle_id} is not running ({cyc['status'].iloc[0]})", "ref": cycle_id}
+    else:
+        result = _guard(actions.stop, cycle_id, reason, by or getpass.getuser())
+    _action_done(result, as_json)
 
 
 @app.command()
@@ -244,6 +352,85 @@ def promote(
     _log(f"approval recorded: {aid} ({decision})")
     if decision == "approve":
         P.promote(model_version, log=_log)
+
+
+def _action_done(result: dict, as_json: bool, publish: bool = True) -> None:
+    """Print an ActionResult (one JSON line with --json), refresh the console snapshot, exit 1 on failure."""
+    if publish and result.get("ok"):
+        from lau.console.snapshot import publish_quietly
+
+        publish_quietly("cli", log_fn=(lambda m: None) if as_json else _log)
+    if as_json:
+        print(json.dumps(result, default=str))
+    else:
+        (_log if result.get("ok") else console.print)(("" if result.get("ok") else "✗ ") + str(result.get("message")))
+    if not result.get("ok"):
+        raise typer.Exit(1)
+
+
+@app.command("gate")
+def gate_cmd(
+    candidate_ref: str = typer.Argument(..., help="e.g. candidate:7"),
+    as_json: bool = typer.Option(False, "--json", help="print one JSON ActionResult line"),
+) -> None:
+    """Run the holdout promotion gate for a validated candidate (uses one of the definition's holdout reads)."""
+    from lau.console import actions
+
+    _action_done(_guard(actions.run_gate, candidate_ref), as_json)
+
+
+@app.command("decide")
+def decide_cmd(
+    candidate_ref: str = typer.Argument(..., help="e.g. candidate:7"),
+    decision: str = typer.Option(..., "--decision", help="approve or reject"),
+    rationale: str = typer.Option(..., "--rationale", help="why (at least 10 characters)"),
+    approver: str = typer.Option("", "--approver", help="who decides (default: the OS user)"),
+    as_json: bool = typer.Option(False, "--json", help="print one JSON ActionResult line"),
+) -> None:
+    """Record a person's decision on the candidate's latest passing gate result (two-person rule applies)."""
+    import getpass
+
+    from lau.console import actions
+
+    _action_done(_guard(actions.decide, candidate_ref, decision, rationale, approver or getpass.getuser()), as_json)
+
+
+@app.command("promote-approved")
+def promote_approved_cmd(
+    candidate_ref: str = typer.Argument(..., help="e.g. candidate:7"),
+    as_json: bool = typer.Option(False, "--json", help="print one JSON ActionResult line"),
+) -> None:
+    """Promote a candidate whose latest passing gate has the required approvals (promoter identity)."""
+    from lau.console import actions
+
+    _action_done(_guard(actions.promote, candidate_ref), as_json)
+
+
+@app.command("ack-alert")
+def ack_alert_cmd(
+    alert_id: str = typer.Argument(..., help="alert id as shown in the console"),
+    note: str = typer.Option("", "--note"),
+    by: str = typer.Option("", "--by", help="who acknowledges (default: the OS user)"),
+    as_json: bool = typer.Option(False, "--json", help="print one JSON ActionResult line"),
+) -> None:
+    """Acknowledge a monitoring alert (it stays in the history)."""
+    import getpass
+
+    from lau.console import actions
+
+    _action_done(_guard(actions.ack, alert_id, note, by or getpass.getuser()), as_json)
+
+
+snapshot_app = typer.Typer(no_args_is_help=True, help="Console snapshot for a console running on your machine.")
+app.add_typer(snapshot_app, name="console-snapshot")
+
+
+@snapshot_app.command("publish")
+def snapshot_publish() -> None:
+    """Publish the tables the console may read to the console volume (reads as the ui identity)."""
+    from lau.console.snapshot import publish
+
+    _guard(publish, "cli", _log)
 
 
 @app.command()
@@ -319,6 +506,159 @@ def cost_cmd(days: int = 7) -> None:
 
     _log(cost.billing_actuals(days).to_string(index=False) or "(no billing rows yet)")
     _log(f"month-to-date logged: ${cost.month_to_date_usd():.2f}")
+
+
+features_app = typer.Typer(no_args_is_help=True, help="People's input to the loop: reject features, pin hypotheses.")
+app.add_typer(features_app, name="features")
+
+
+@features_app.command("decide")
+def features_decide(
+    name: str,
+    decision: str = typer.Option(..., "--decision", help="reject or restore"),
+    reason: str = typer.Option(..., "--reason"),
+    by: str = typer.Option("", "--by"),
+    as_json: bool = typer.Option(False, "--json", help="print one JSON ActionResult line"),
+) -> None:
+    """Reject a registered feature (the harness then fails any candidate using it), or restore it."""
+    import getpass
+
+    from lau.console import actions
+
+    _action_done(_guard(actions.feature_decision, name, decision, reason, by or getpass.getuser()), as_json)
+
+
+@features_app.command("pin")
+def features_pin(
+    text: str,
+    by: str = typer.Option("", "--by"),
+    as_json: bool = typer.Option(False, "--json", help="print one JSON ActionResult line"),
+) -> None:
+    """Pin a hypothesis for the planner of every next cycle."""
+    import getpass
+
+    from lau.console import actions
+
+    _action_done(_guard(actions.hypothesis_pin, text, by or getpass.getuser()), as_json)
+
+
+@features_app.command("unpin")
+def features_unpin(
+    hypothesis_id: str,
+    by: str = typer.Option("", "--by"),
+    as_json: bool = typer.Option(False, "--json", help="print one JSON ActionResult line"),
+) -> None:
+    """Unpin a hypothesis."""
+    import getpass
+
+    from lau.console import actions
+
+    _action_done(_guard(actions.hypothesis_unpin, hypothesis_id, by or getpass.getuser()), as_json)
+
+
+readiness_app = typer.Typer(no_args_is_help=True, help="Production readiness: checklist, evidence, sign-offs.")
+app.add_typer(readiness_app, name="readiness")
+
+
+@readiness_app.command("status")
+def readiness_status() -> None:
+    """The checklist with the evidence the system gathered and the sign-offs recorded."""
+    from lau.readiness import status
+
+    s = _guard(status)
+    for item in s["items"]:
+        _log(f"[{item['state'].upper():8}] {item['id']}: {item['title']}")
+        for e in item["evidence"]:
+            _log(f"    {'ok ' if e['met'] else '-- '} {e['label']} ({e['detail']})")
+        for r in item["signoffs"]:
+            _log(f"    {r['role']}: {r['decision'] or 'not signed'}" + (f" by {r['signer']}" if r["signer"] else ""))
+    _log(s["statement"])
+
+
+def _readiness_record(item_id: str, role: str, decision: str, note: str | None) -> None:
+    import getpass
+
+    from lau.readiness import record
+
+    if not sys.stdin.isatty():
+        _fail("a sign-off needs a person at an interactive terminal")
+    who = getpass.getuser()
+    if not typer.confirm(f"Record '{decision}' on {item_id} as {role} ({who})?"):
+        _fail("nothing recorded")
+    why = note or typer.prompt("What you reviewed (at least 20 characters)")
+    try:
+        row = record(item_id, role, who, decision, why)
+    except ValueError as e:
+        _fail(str(e))
+    _log(f"recorded {row['signoff_id']}: {decision} on {item_id} by {who} as {role}")
+
+
+@readiness_app.command("sign")
+def readiness_sign(
+    item_id: str, role: str = typer.Option(..., "--role"), note: str = typer.Option(None, "--note")
+) -> None:
+    """Sign a checklist item for your role (interactive)."""
+    _readiness_record(item_id, role, "sign", note)
+
+
+@readiness_app.command("decline")
+def readiness_decline(
+    item_id: str, role: str = typer.Option(..., "--role"), note: str = typer.Option(None, "--note")
+) -> None:
+    """Decline a checklist item for your role, with the reason (interactive)."""
+    _readiness_record(item_id, role, "decline", note)
+
+
+@readiness_app.command("revoke")
+def readiness_revoke(
+    item_id: str, role: str = typer.Option(..., "--role"), note: str = typer.Option(None, "--note")
+) -> None:
+    """Withdraw an earlier sign-off for your role (interactive)."""
+    _readiness_record(item_id, role, "revoke", note)
+
+
+report_app = typer.Typer(no_args_is_help=True, help="Dated reports from the evidence (monthly | model).")
+app.add_typer(report_app, name="report")
+
+
+@report_app.command("monthly")
+def report_monthly(month: str = typer.Option(None, "--month", help="YYYY-MM (default: last month)")) -> None:
+    """The monthly improvement report (experiments.reports, kind monthly_report)."""
+    from lau.reports import monthly
+
+    _guard(monthly, month, _log)
+
+
+@report_app.command("model")
+def report_model(production_version: str) -> None:
+    """A documentation draft for a production model version (experiments.reports, kind model_documentation)."""
+    from lau.reports import model_pack
+
+    _guard(model_pack, production_version, _log)
+
+
+@app.command("console")
+def console_cmd(
+    port: int = typer.Option(8765, help="API port"),
+    host: str = typer.Option("127.0.0.1", help="Bind address (keep on localhost for local use)"),
+    actions: bool = typer.Option(False, "--actions", help="Enable human actions (gate, approve, promote, stop)"),
+    reload: bool = typer.Option(False, "--reload", help="Auto-reload on code changes (development)"),
+    mirror: bool = typer.Option(
+        False, "--mirror", help="Mirror the workspace through the console snapshot (no SQL warehouse while you browse)"
+    ),
+    mirror_dir: Path = typer.Option(Path(".local_lake/console_mirror"), help="Where the mirror keeps its local copy"),
+) -> None:
+    """Run the Underwriting Console (API + built web app) locally."""
+    import uvicorn
+
+    if actions:
+        os.environ["LAU_CONSOLE_ACTIONS"] = "1"
+    if mirror:
+        os.environ.update(LAU_CONSOLE_MIRROR="1", LAU_BACKEND="local", LAU_LOCAL_LAKE=str(mirror_dir.resolve()))
+    mode = "mirror of the workspace" if mirror else "direct"
+    state = "ON" if actions else "off"
+    _log(f"Underwriting Console on http://{host}:{port}  ({mode}; actions {state}; API docs /api/docs)")
+    uvicorn.run("lau.console.app:app", host=host, port=port, reload=reload, log_level="warning")
 
 
 @app.command()

@@ -43,6 +43,15 @@ def test_multiple_testing_margin_grows_and_resets_per_version(lake):
     mt.record(st, lake["version"], "test:x")
     assert mt.n_tests(st, lake["version"]) == before + 1
     assert mt.n_tests(st, "some-other-version") == 0
+    # a rebuild of the validation labels (new data version) resets the budget
+    import time
+
+    time.sleep(0.01)
+    mt.record(st, lake["version"], "reset", purpose="reset")
+    time.sleep(0.01)
+    assert mt.n_tests(st, lake["version"]) == 0
+    mt.record(st, lake["version"], "test:y")
+    assert mt.n_tests(st, lake["version"]) == 1
 
 
 def test_catalog_flags_planted_leak_and_proxy_and_finds_signal(lake):
@@ -56,9 +65,22 @@ def test_catalog_flags_planted_leak_and_proxy_and_finds_signal(lake):
     assert proxy["geo_affluence_idx"] == "high"  # planted protected-class proxy
     assert risk["zip3"] != "high"  # high-cardinality field must not look like a leak
     clean = cat[(cat["leakage_risk"] != "high")].sort_values("univariate_auc_train", ascending=False)
-    # payment components (loan_amount, scheduled_payment, income) and the legacy score legitimately rank high too
+    # The planted signal spans bureau/application features AND bank-statement cash flows; payment components
+    # (loan_amount, scheduled_payment, income) and the legacy score legitimately rank high too.
+    cf_signal = {
+        "cf_income_cv_6m",
+        "cf_min_balance_6m",
+        "cf_avg_balance_6m",
+        "cf_expense_to_income_6m",
+        "cf_nsf_count_6m",
+        "cf_housing_on_time_share_6m",
+        "cf_verified_to_stated_income",
+        "cf_income_min_month_6m",
+    }
     top = set(clean.head(12)["variable"])
-    assert len(top & set(CAUSAL)) >= 4, top
+    assert len(top & set(CAUSAL)) >= 2, top
+    assert len(top & cf_signal) >= 2, top
+    assert len(top & (set(CAUSAL) | cf_signal)) >= 6, top
 
 
 def _fit(lake, feats, model_type="logreg"):
@@ -180,8 +202,17 @@ def test_engineered_feature_train_register_evaluate_roundtrip(lake):
 
     agent = get_store("agent")
     cols = agent.query(f"SELECT * FROM {agent.fq('curated', 'applications_dev')} LIMIT 0").columns.tolist()
-    register_feature(agent, "loan_to_income_t", "loan_amount / nullif(annual_income, 0)", "leverage", "higher -> PD up",
-                     "test", "cy-test", cols, lake["version"])
+    register_feature(
+        agent,
+        "loan_to_income_t",
+        "loan_amount / nullif(annual_income, 0)",
+        "leverage",
+        "higher -> PD up",
+        "test",
+        "cy-test",
+        cols,
+        lake["version"],
+    )
     model, df, _ = train_model(agent, lake["version"], "logreg", {}, CAUSAL, ["loan_to_income_t"], consumer="test")
     _, mv = registry_io.log_candidate(model, {}, {"author": "test"}, df, role="harness")
     loaded = registry_io.load_pd_model(registry_io.candidate_uri(mv), "harness")

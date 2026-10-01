@@ -1,0 +1,25 @@
+/* Features lab. Colors only through tokens; class names are prefixed with "features-". */
+.features-toggle {
+  font: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  color: var(--accent);
+  display: inline-flex;
+  gap: 6px;
+  align-items: baseline;
+  overflow-wrap: anywhere;
+}
+.features-toggle:hover .features-name { text-decoration: underline; }
+.features-chevron { color: var(--faint); width: 10px; flex: none; }
+table.data tr.features-row.open > td { background: var(--surface-2); border-bottom-color: transparent; }
+table.data tr.features-detail > td { background: var(--surface-2); padding: 4px 16px 18px; }
+.features-detail-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); gap: var(--gap); }
+@media (max-width: 900px) { .features-detail-grid { grid-template-columns: minmax(0, 1fr); } }
+.features-detail-grid pre.code { background: var(--surface); max-height: 260px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.features-by { font-size: var(--fs-xs); color: var(--muted); }
+/* The detail row spans the whole (possibly scrolling) table; this keeps its content as wide as the visible container. */
+.features-wrap { container-type: inline-size; }
+.features-detail-inner { position: sticky; left: 16px; width: calc(100cqw - 32px); max-width: 100%; }

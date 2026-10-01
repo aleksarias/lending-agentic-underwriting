@@ -96,7 +96,25 @@ def set_active(store: Store, version: str, activated_by: str, approval_id: str |
     return previous
 
 
+def approvers(store: Store, version: str) -> list[str]:
+    """Distinct people who approved this exact definition hash, oldest first."""
+    if not store.table_exists("ops", "definition_approvals"):
+        return []
+    df = store.query(
+        f"SELECT approved_by FROM {store.fq('ops', 'definition_approvals')} "
+        f"WHERE definition_version = '{version}' ORDER BY approved_at"
+    )
+    out: list[str] = []
+    for who in df["approved_by"] if len(df) else []:
+        if str(who) not in out:
+            out.append(str(who))
+    return out
+
+
 def record_approval(store: Store, version: str, plan_summary: str, approver: str | None = None) -> str:
+    who = approver or getpass.getuser()
+    if who in approvers(store, version):  # one person approves a hash once: the two-person rule counts people
+        return find_approval(store, version) or ""
     approval_id = f"defapr-{version}-{int(_now().timestamp())}"
     store.write_df(
         "ops",
@@ -106,7 +124,7 @@ def record_approval(store: Store, version: str, plan_summary: str, approver: str
                 {
                     "approval_id": approval_id,
                     "definition_version": version,
-                    "approved_by": approver or getpass.getuser(),
+                    "approved_by": who,
                     "approved_at": _now(),
                     "plan_summary": plan_summary[:8000],
                 }

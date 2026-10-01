@@ -10,6 +10,9 @@ Roles:
   agent    - identity for every agent tool call. Read-only curated/labels (active views only), r/w experiments
              and feature_registry. No grants on raw, holdout, production, ops.
   promoter - writes `production`, only via `lau promote` after a recorded human approval.
+  ui       - the console: read-only, metadata and aggregates.
+`simulation` (synthetic ground truth, the simulated servicer) is the harness's alone: no agent, console or promoter
+grant, so latent risk and protected attributes of synthetic applicants never reach a model, an agent or a screen.
 """
 
 from __future__ import annotations
@@ -39,8 +42,15 @@ RW_SCHEMA = ("USE SCHEMA", "SELECT", "MODIFY", "CREATE TABLE", "CREATE MODEL", "
 
 # Objects the agent role may read in otherwise-restricted schemas (created by the pipeline).
 AGENT_READABLE_OBJECTS = {
-    "curated": ["applications_dev", "data_catalog"],
+    "curated": ["applications_dev", "data_catalog", "cashflow_monthly_dev"],
     "labels": ["labels_active"],
+}
+
+# Objects the console (read-only "ui" role) may read in otherwise-restricted schemas: metadata and aggregates only,
+# never applicant-level rows, all-version labels or the holdout.
+UI_READABLE_OBJECTS = {
+    "curated": ["data_catalog", "field_lineage"],
+    "labels": ["split_meta"],
 }
 
 GRANTS: list[Grant] = [
@@ -48,7 +58,7 @@ GRANTS: list[Grant] = [
     Grant("harness", "CATALOG", privileges=("USE CATALOG",)),
     *[
         Grant("harness", "SCHEMA", s, privileges=ALL)
-        for s in ("curated", "labels", "feature_registry", "experiments", "holdout", "ops")
+        for s in ("curated", "labels", "feature_registry", "experiments", "holdout", "ops", "simulation")
     ],
     Grant("harness", "SCHEMA", "raw", privileges=("USE SCHEMA", "SELECT", "READ VOLUME")),
     Grant("harness", "SCHEMA", "production", privileges=RO_SCHEMA),
@@ -68,6 +78,15 @@ GRANTS: list[Grant] = [
     Grant("promoter", "SCHEMA", "production", privileges=ALL),
     Grant("promoter", "SCHEMA", "experiments", privileges=RO_SCHEMA),
     Grant("promoter", "SCHEMA", "ops", privileges=("USE SCHEMA", "SELECT")),
+    # --- ui (Underwriting Console, read-only) ---------------------------------------------------------
+    Grant("ui", "CATALOG", privileges=("USE CATALOG",)),
+    *[
+        Grant("ui", "SCHEMA", s, privileges=("USE SCHEMA", "SELECT"))
+        for s in ("ops", "experiments", "feature_registry", "production")
+    ],
+    Grant("ui", "SCHEMA", "curated", privileges=("USE SCHEMA",)),
+    Grant("ui", "SCHEMA", "labels", privileges=("USE SCHEMA",)),
+    *[Grant("ui", "TABLE", schema, obj, ("SELECT",)) for schema, objs in UI_READABLE_OBJECTS.items() for obj in objs],
 ]
 
 
