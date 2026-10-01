@@ -12,8 +12,8 @@ from __future__ import annotations
 import pandas as pd
 
 from lau.console import deps
-from lau.console.services import benchmark, evals, ledger, models, ops
-from lau.console.util import api_router, integer, num, read_table, text, unavailable
+from lau.console.services import benchmark, evals, feedback, ledger, models, ops
+from lau.console.util import api_router, integer, num, read_table, text
 
 router = api_router()
 
@@ -141,9 +141,5 @@ def progress() -> dict:
         "guardrails": _guardrails(row),
         "process_health": _process_health(),
         "denominator": _denominator(row),
-        "production": unavailable(
-            "No loan has been decided by a model yet, so there is no production vintage to compare predicted with "
-            "realized default rates. Evidence so far is out-of-sample benchmark evidence, not production outcomes.",
-            ["Real-time decision API (Model Serving)", "Decision log", "Loan status feed"],
-        ),
+        "production": feedback.production_evidence(),
     }

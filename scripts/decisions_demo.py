@@ -2,7 +2,8 @@
 
 Builds a fresh small lake, then: approves and activates the policy (as "demo-reviewer", in this throwaway lake only),
 registers two champions (one serving), builds the decision model, sends three simulated months of applications,
-promotes the second champion into a shadow rollout, sends another month, and runs the three release checks.
+promotes the second champion into a shadow rollout, sends another month, runs the three release checks, then runs the
+feedback loop for fourteen more months (servicer feed, ingestion, maturation) and the production evidence steps.
 
     uv run python scripts/decisions_demo.py --out .local_lake/decisions_demo
     LAU_ENV_FILE=/dev/null LAU_BACKEND=local LAU_LOCAL_LAKE=.local_lake/decisions_demo \
@@ -125,9 +126,23 @@ def run(cfg: Path) -> None:
     checks.parity(n=200, log=print)
     checks.load(n=120, concurrency=4, kind="inprocess", log=print)
     checks.rollback(n=100, log=print)
+
+    # the feedback loop: the servicer reports on booked loans each month; loans mature after the 12-month window
+    from lau.feedback import feed, production, servicer
+
+    servicer.run(log=print)
+    feed.ingest(log=print)
+    for _ in range(14):
+        traffic.originate(months=1, kind="inprocess", log=quiet)
+        servicer.run(log=quiet)
+        feed.ingest(log=quiet)
+        production.maturation_check(log=print)
     from lau.evidence.run import run_all
 
-    run_all(log=quiet, only="model_registry")  # the console reads the serving alias from the registry mirror
+    run_all(
+        log=print,
+        only=["model_registry", "production_evidence", "decision_fairness", "serving_parity"],
+    )  # the console reads the serving alias from the registry mirror, and the production evidence
 
 
 if __name__ == "__main__":

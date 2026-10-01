@@ -17,6 +17,7 @@ schemas:
   holdout: holdout           # readable only by the harness principal
   production: production     # written only by the promoter principal after human approval
   ops: ops                   # pipeline state, approvals, traces, cost log
+  simulation: simulation     # synthetic ground truth and the simulated servicer: harness only, absent in production
 
 warehouse:
   name: lau-warehouse

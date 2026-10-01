@@ -2,7 +2,7 @@
 
 Components
   thresholds, budgets, protected_classes, models, benchmarks,  config/*.yaml, parsed then canonical-JSON hashed
-  decisioning, reason_statements
+  decisioning, reason_statements, feedback
   grants                                                        `lau.governance.grants.GRANTS`, sorted canonical form
   prompt:<role>                                                 `agents/prompts/_common.md` + `<role>.md`
   code                                                          git HEAD of the project root, plus a dirty marker
@@ -41,6 +41,7 @@ CONFIG_COMPONENTS = (
     "benchmarks",
     "decisioning",
     "reason_statements",
+    "feedback",
 )
 PROMPTS_DIR = Path(__file__).resolve().parent / "agents" / "prompts"
 CODE_PATHS = ("src", "pyproject.toml", "uv.lock")

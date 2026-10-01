@@ -3,25 +3,15 @@
  * the pipeline for each definition of default (a variable's predictiveness and leakage risk depend on the label).
  * Cash-flow cohorts are quarterly aggregates; no applicant rows are shown anywhere on this screen.
  */
-import { useCashflowCohorts, useCatalog, useDefinitions, useSettings, useStatus } from "../api/hooks";
-import type { CatalogData, DefinitionRef, Unavailable } from "../api/types";
+import { useCashflowCohorts, useCatalog, useDefinitions, useSettings } from "../api/hooks";
+import type { CatalogData, DefinitionRef } from "../api/types";
 import { CashflowExplorer } from "../components/Data/CashflowExplorer";
 import { CatalogSection } from "../components/Data/CatalogSection";
+import { ParitySection } from "../components/Data/ParitySection";
 import "../components/Data/data.css";
 import { DefinitionSelect, definitionRefOf, pickDefinition, plural, useDefinitionParam } from "../components/Models/shared";
 import { limitsFrom } from "../components/Performance/thresholds";
-import { Page, PageHeader, QueryView, Section, UnavailableState } from "../components/ui";
-
-function parity(nothingServing: boolean | undefined): Unavailable {
-  return {
-    available: false,
-    reason:
-      nothingServing === false
-        ? "A model is serving, but the log of the inputs behind each decision is not available to compare with training yet."
-        : "Parity compares each variable’s distribution in training with its distribution across live decisions. No model is making decisions yet, so there is nothing on the serving side to compare.",
-    requires: ["A promoted model serving decisions", "A log of the inputs each decision used"],
-  };
-}
+import { Page, PageHeader, QueryView } from "../components/ui";
 
 export default function Data() {
   const defs = useDefinitions();
@@ -30,7 +20,6 @@ export default function Data() {
   const catalog = useCatalog(requested);
   const cash = useCashflowCohorts();
   const settings = useSettings();
-  const status = useStatus();
   const limits = limitsFrom(settings.data);
 
   const refs: DefinitionRef[] = catalog.data?.definitions ?? (defs.data ?? []).map(definitionRefOf);
@@ -63,9 +52,7 @@ export default function Data() {
       <QueryView query={cash} loadingHeight={240}>
         {(d) => <CashflowExplorer data={d} />}
       </QueryView>
-      <Section id="parity" title="Training and serving parity" note="Whether the data a model sees in production looks like the data it was trained on, variable by variable.">
-        <UnavailableState u={parity(status.data ? status.data.serving == null : undefined)} title="No live decisions to compare yet" />
-      </Section>
+      <ParitySection />
     </Page>
   );
 }

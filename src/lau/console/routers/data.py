@@ -93,6 +93,14 @@ def variable(variable: str, version: str | None = DEF_PARAM) -> dict:
     return _variable(hit.iloc[0].to_dict())
 
 
+@router.get("/parity")
+def parity() -> dict:
+    """Training-serving parity of the inputs the decision API saw (ops.serving_parity)."""
+    from lau.console.services import feedback
+
+    return feedback.serving_parity()
+
+
 @router.get("/cashflow/cohorts")
 def cashflow_cohorts() -> dict:
     st = deps.ui_store()

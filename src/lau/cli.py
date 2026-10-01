@@ -33,11 +33,12 @@ _mount_evidence()
 
 
 def _mount_decision() -> None:
-    from lau.decision.cli import decision_app, policy_app, rollout_app
+    from lau.decision.cli import decision_app, feed_app, policy_app, rollout_app
 
     app.add_typer(policy_app, name="policy")
     app.add_typer(decision_app, name="decision")
     app.add_typer(rollout_app, name="rollout")
+    app.add_typer(feed_app, name="feed")
 
 
 _mount_decision()

@@ -3,8 +3,9 @@
 The simulated clock (ops.sim_clock) starts the month after the data's as-of month and moves forward one month per
 successful run. Applications for a month come from the same generator as the training data, seeded by the month,
 so a retried run sends identical requests (same request ids, so the same decision ids). Each request carries the
-applicant's bank-statement lines from before the decision. The applicants' latent risk goes to ops.sim_truth for the
-servicer simulator; it never reaches a model, a request or an agent.
+applicant's bank-statement lines from before the decision. The applicants' latent risk, protected attributes and
+surname go to simulation.truth (harness only) for the servicer simulator and fairness checks; they never reach a
+model, a request, an agent or the console.
 
 Transports: `endpoint` (Model Serving, when it exists) or `inprocess` (the live decision model loaded from the
 registry: the same artifact the endpoint serves). `auto` picks the endpoint when it exists.
@@ -48,14 +49,15 @@ def _advance(month: pd.Period) -> None:
 
 # ---- applications --------------------------------------------------------------------------------------------------
 def generate_month(month: pd.Period, n: int) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """(applications, pre-decision statement lines, latent truth) for one simulated month; deterministic."""
+    """(applications, pre-decision statement lines, truth) for one simulated month; deterministic."""
     from lau.synth import cashflow as cf
+    from lau.synth import surnames
     from lau.synth.generator import PII_COLUMNS, PROTECTED_COLUMNS, _applications
 
     s = get_settings().synth
     seed = int(s["seed"]) + zlib.crc32(f"traffic-{month}".encode()) % 1_000_000
     prefix = f"M{month.year % 100:02d}{month.month:02d}"
-    apps, risk, _protected, lat = _applications(
+    apps, risk, protected, lat = _applications(
         np.random.default_rng(seed),
         int(n),
         [month],
@@ -72,8 +74,20 @@ def generate_month(month: pd.Period, n: int) -> tuple[pd.DataFrame, pd.DataFrame
         int(s["cashflow"]["months_history"]),
         np.zeros(len(apps)),
     )
+    race = protected["race_ethnicity"].to_numpy()
+    truth = pd.DataFrame(
+        {
+            "application_id": apps["application_id"],
+            "sim_month": str(month),
+            "latent_risk": risk,
+            "race_ethnicity": race,
+            "sex": protected["sex"].to_numpy(),
+            "age": protected["age"].to_numpy(),
+            "surname": surnames.draw(np.random.default_rng(seed + 3), race),  # informative, unlike the generator's
+            "zip3": apps["zip3"].to_numpy(),
+        }
+    )
     apps = apps.drop(columns=[c for c in PII_COLUMNS + PROTECTED_COLUMNS if c in apps.columns])
-    truth = pd.DataFrame({"application_id": apps["application_id"], "sim_month": str(month), "latent_risk": risk})
     return apps, tx[tx["days_before_decision"] >= 1], truth
 
 
@@ -185,7 +199,7 @@ def originate(months: int | None = None, kind: str = "auto", log=print) -> dict:
         t0 = time.perf_counter()
         responses, rows, latency = send(requests, via, int(cfg["batch_size"]))
         n_new = decision_log.record(responses, rows, source=via.name, client_latency_ms=latency)
-        st.write_df("ops", "sim_truth", truth, mode="replace_partition", partition={"sim_month": str(month)})
+        st.write_df("simulation", "truth", truth, mode="replace_partition", partition={"sim_month": str(month)})
         sent = pd.DataFrame(
             {
                 "request_id": [r["request_id"] for r in requests],

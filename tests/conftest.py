@@ -93,3 +93,47 @@ def synth_small():
 
     cfg = yaml.safe_load((_CFG / "synth.yaml").read_text())
     return generate(cfg, n_applications=6000)
+
+
+@pytest.fixture(scope="session")
+def decision_stack(lake, cfg_dir):
+    """An approved, active credit policy and two production champions trained on the active definition (a serving).
+
+    Shared by the decisioning and feedback tests; each test module sets its own traffic sizes.
+    """
+    from lau.data.features import load_dev_frame
+    from lau.decision import policy
+    from lau.definition.registry import active_version
+    from lau.modeling import registry_io
+    from lau.modeling.model import PDModel
+    from lau.modeling.search_space import defaults
+    from lau.store import get_store
+
+    st = get_store("harness")
+    version = active_version(st)
+    dev = load_dev_frame(st, version, "test")
+    train = dev[dev["split"] == "train"]
+    prod = registry_io.production_model_name()
+    feats = {
+        "a": ["bureau_score", "dti", "util_revolving", "inq_6m", "pmt_to_income"],
+        "b": ["bureau_score", "dti", "util_revolving", "pmt_to_income", "cf_nsf_count_6m", "cf_income_cv_6m"],
+    }
+    versions = {}
+    for key, cols in feats.items():
+        model = PDModel("logreg", defaults("logreg"), cols, [], version).fit(train, train["label"].to_numpy())
+        _, mv = registry_io.log_candidate(model, {}, {"author": "test"}, train, role="harness")
+        with registry_io.mlflow_session("promoter") as c:
+            try:
+                c.create_registered_model(prod)
+            except Exception:  # noqa: BLE001, S110 - exists
+                pass
+            pv = c.copy_model_version(registry_io.candidate_uri(mv), prod)
+            c.set_model_version_tag(prod, pv.version, "definition_version", version)
+            c.set_model_version_tag(prod, pv.version, "lau_kind", "champion")
+        versions[key] = str(pv.version)
+    with registry_io.mlflow_session("promoter") as c:
+        c.set_registered_model_alias(prod, registry_io.SERVING_ALIAS, versions["a"])
+    p = policy.load_policy(cfg_dir / "policy.yaml")
+    policy.record_approval(p, "alice", "initial policy reviewed")
+    policy.apply(cfg_dir / "policy.yaml", by="alice")
+    return {"version": version, **versions}

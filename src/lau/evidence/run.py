@@ -1,7 +1,9 @@
 """Run the evidence steps in dependency order and write their `ops.*` tables.
 
     model_registry -> evaluation_metrics -> benchmark_results -> definition_sensitivity -> vintage_curves
-    -> cashflow_cohorts -> proxy_scan -> improvement_ledger
+    -> cashflow_cohorts -> proxy_scan -> production_evidence -> decision_fairness -> serving_parity
+    -> improvement_ledger
+The three production steps read the decision log and the loan status feed; before either exists they are skipped.
 
 Per-run tables are appended with one shared run_id and computed_at; `model_registry` and `evaluation_metrics` are
 replaced each run. A step whose prerequisites are missing (no active definition, no data load) is skipped with a
@@ -19,6 +21,8 @@ import pandas as pd
 from lau.evidence import benchmark, cohorts, metrics_flat, outcomes, proxies, registry_sync, schemas, verdict
 from lau.evidence.config import BenchmarkConfig
 from lau.evidence.context import EvidenceContext, EvidenceNotReadyError
+from lau.feedback import fairness as decision_fairness
+from lau.feedback import parity, production
 
 STEPS: dict[str, Callable[[EvidenceContext], pd.DataFrame]] = {
     "model_registry": registry_sync.compute,
@@ -28,6 +32,9 @@ STEPS: dict[str, Callable[[EvidenceContext], pd.DataFrame]] = {
     "vintage_curves": outcomes.vintage,
     "cashflow_cohorts": cohorts.compute,
     "proxy_scan": proxies.compute,
+    "production_evidence": production.compute,
+    "decision_fairness": decision_fairness.compute,
+    "serving_parity": parity.compute,
     "improvement_ledger": verdict.compute,
 }
 ALIASES = {
@@ -41,6 +48,9 @@ ALIASES = {
     "proxies": "proxy_scan",
     "verdict": "improvement_ledger",
     "ledger": "improvement_ledger",
+    "production": "production_evidence",
+    "fairness": "decision_fairness",
+    "parity": "serving_parity",
 }
 
 

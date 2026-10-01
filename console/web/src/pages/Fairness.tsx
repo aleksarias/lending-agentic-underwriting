@@ -4,8 +4,10 @@
  * compliance findings are agent output (proposed). Protected attributes are used only for testing, never as inputs.
  */
 import { useDefinitions, useFairness, useModels, useStatus } from "../api/hooks";
-import type { DefinitionRef, FairnessData, ModelRef, Unavailable } from "../api/types";
+import type { DefinitionRef, FairnessData, ModelRef } from "../api/types";
+import { isUnavailable } from "../api/types";
 import { CandidatesTable, lowestOf } from "../components/Fairness/CandidatesTable";
+import { DecisionFairnessView } from "../components/Fairness/DecisionFairness";
 import { ComplianceFindings, ProhibitedRegister } from "../components/Fairness/Findings";
 import { ProxyHeatmap } from "../components/Fairness/ProxyHeatmap";
 import { classLabel, comparison } from "../components/Fairness/labels";
@@ -40,7 +42,6 @@ export default function Fairness() {
             f={f}
             modelOf={modelOf}
             synthetic={status.data?.data_mode === "synthetic"}
-            nothingServing={status.data ? status.data.serving == null : undefined}
           />
         )}
       </QueryView>
@@ -48,7 +49,7 @@ export default function Fairness() {
   );
 }
 
-function FairnessBody({ f, modelOf, synthetic, nothingServing }: { f: FairnessData; modelOf: (ref: string) => ModelRef | undefined; synthetic: boolean; nothingServing?: boolean }) {
+function FairnessBody({ f, modelOf, synthetic }: { f: FairnessData; modelOf: (ref: string) => ModelRef | undefined; synthetic: boolean }) {
   const cands = [...f.candidates].sort((a, b) => b.ts.localeCompare(a.ts));
   const latest = cands.find((c) => !isBaselineRef(c.candidate_ref)) ?? cands[0];
   const measured = cands.filter((c) => c.min_air != null);
@@ -61,13 +62,6 @@ function FairnessBody({ f, modelOf, synthetic, nothingServing }: { f: FairnessDa
   const names = classKeys.map((k) => classLabel(k).toLowerCase());
   const attributeList = names.length ? `${names.slice(0, -1).join(", ")}${names.length > 1 ? " and " : ""}${names[names.length - 1]}`.replace(/^./, (c) => c.toUpperCase()) : "";
 
-  const decisions: Unavailable = {
-    available: false,
-    reason: nothingServing === false
-      ? "Adverse impact on live decisions needs estimated group membership for applicants and the decision log, which are not connected yet."
-      : "No model is making decisions, so there are no live decisions to measure. Adverse impact on actual decisions appears once a promoted model serves and applicants’ group membership can be estimated.",
-    requires: ["Real-time decision API and decision log", "Loan status feed", "Estimated group membership for applicants, reviewed by counsel"],
-  };
 
   return (
     <>
@@ -158,7 +152,11 @@ function FairnessBody({ f, modelOf, synthetic, nothingServing }: { f: FairnessDa
       </div>
 
       <Section title="Adverse impact on actual decisions" note="Validation results show how a model would treat applicants; decisions show how it does.">
-        <UnavailableState u={decisions} title="No decisions to measure yet" />
+        {isUnavailable(f.decisions) ? (
+          <UnavailableState u={f.decisions} title="No decisions to measure yet" />
+        ) : (
+          <DecisionFairnessView d={f.decisions} threshold={f.threshold_air} />
+        )}
       </Section>
     </>
   );

@@ -8,6 +8,7 @@
 import { useFeed, useStatus } from "../api/hooks";
 import type { FeedData } from "../api/types";
 import { MaturationSection } from "../components/Feed/MaturationSection";
+import { ServicerSection, servicerSentence } from "../components/Feed/ServicerSection";
 import { VintageSection } from "../components/Feed/VintageSection";
 import { NotBuiltPanel, type WillShow } from "../components/Operate/NotBuiltPanel";
 import { Banner, Page, PageHeader, QueryView, Section, Tiles, TimeAgo } from "../components/ui";
@@ -22,6 +23,7 @@ const WILL_SHOW: WillShow[] = [
 ];
 
 function summarySentence(f: FeedData): string {
+  if (f.servicer) return servicerSentence(f.servicer);
   const p = f.performance;
   const state = f.live ? "The loan status feed is live" : "The loan status feed is not live";
   if (!p.data_version) return `${state} and no performance data has been loaded yet.`;
@@ -52,11 +54,15 @@ export default function Feed() {
               }
             />
 
-            <Banner tone={f.live ? "good" : "neutral"} title={f.live ? "Live feed" : "Not a live feed"}>
-              {f.reason}
-            </Banner>
+            {f.servicer ? (
+              <ServicerSection s={f.servicer} />
+            ) : (
+              <Banner tone="neutral" title="Not a live feed">
+                {f.reason}
+              </Banner>
+            )}
 
-            <Section title="Latest performance data" note="The batch version that every label, evaluation and vintage curve on this console was built from.">
+            <Section title="Historical performance data" note="The batch version that the historical labels, evaluations and vintage curves were built from.">
               <Tiles
                 tiles={[
                   { key: "version", label: "Data version", value: shortVersion(f.performance.data_version), sub: f.performance.data_version ? "latest batch load" : "none loaded" },

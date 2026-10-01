@@ -10,6 +10,7 @@ import { useSearchParams } from "react-router-dom";
 import { useProgress } from "../api/hooks";
 import type { BenchmarkDef, BenchmarkMatrix, BenchmarkRow, DiffRow, GuardrailRow, ProgressData, Verdict } from "../api/types";
 import { isUnavailable } from "../api/types";
+import { ProductionEvidenceView } from "../components/Production/ProductionEvidence";
 import { IntervalChart, LineSeriesChart, Sparkline } from "../components/charts";
 import {
   Banner,
@@ -68,7 +69,7 @@ export default function Progress() {
               {isUnavailable(p.production) ? (
                 <UnavailableState u={p.production} title="No production evidence yet" />
               ) : (
-                <ProductionTable p={p} />
+                <ProductionEvidenceView p={p.production} />
               )}
             </Section>
           </>
@@ -423,22 +424,3 @@ function DenominatorSection({ p }: { p: ProgressData }) {
   );
 }
 
-function ProductionTable({ p }: { p: ProgressData }) {
-  if (isUnavailable(p.production)) return null;
-  return (
-    <Card flush>
-      <DataTable
-        rows={p.production.vintages}
-        rowKey={(v) => `${v.cohort}-${v.model.key}`}
-        columns={[
-          { key: "cohort", header: "Vintage", render: (v) => v.cohort, sort: (v) => v.cohort },
-          { key: "model", header: "Model", render: (v) => <ModelBadge model={v.model} /> },
-          { key: "n", header: "Loans", align: "right", render: (v) => fmtNum(v.n), sort: (v) => v.n },
-          { key: "pred", header: "Predicted", align: "right", render: (v) => fmtPct(v.predicted), sort: (v) => v.predicted },
-          { key: "early", header: "Realized early", align: "right", render: (v) => fmtPct(v.realized_early), sort: (v) => v.realized_early },
-          { key: "final", header: "Realized final", align: "right", render: (v) => fmtPct(v.realized_final), sort: (v) => v.realized_final },
-        ]}
-      />
-    </Card>
-  );
-}

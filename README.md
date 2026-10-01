@@ -321,12 +321,13 @@ make teardown                             # remove everything the project create
 | `lau decision check parity\|load\|rollback` | release checks: training-serving parity, latency against targets, rollback drill (ops.release_checks) |
 | `lau decision explain <decision_id>` / `reconcile` | adverse-action content for one decision / log decisions from the endpoint's inference table |
 | `lau rollout list` / `report` / `decide` / `serve` / `rollback` | shadow-first rollouts of promoted champions |
+| `lau feed run` / `status` / `release <file>` | the loan status feed: simulated servicer, ingestion with expectations and quarantine, maturation; release a held file after review ([docs/feedback.md](docs/feedback.md)) |
 | `lau teardown` | remove all project resources (restores an adopted warehouse) |
 
 ### Scheduled jobs (Asset Bundle, `databricks.yml`)
 
 `lau-definition-sync` (applies a changed definition only with a recorded approval), `lau-shadow-scoring`,
-`lau-daily` (definition sync, synthetic decisions, shadow scoring, monitoring, evidence and the console snapshot, in that order, waking the warehouse once a day) and `lau-improvement-cycle` (weekly; runs when `ops.cycle_queue` has work). All run on serverless compute as
+`lau-daily` (definition sync, synthetic decisions, the loan status feed, shadow scoring, monitoring, evidence and the console snapshot, in that order, waking the warehouse once a day) and `lau-improvement-cycle` (weekly; runs when `ops.cycle_queue` has work). All run on serverless compute as
 the harness service principal and are deployed **paused**. Targets: `dev` (this workspace) and `prod` (placeholder).
 
 ## Underwriting Console (web UI)

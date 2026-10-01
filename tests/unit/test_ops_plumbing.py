@@ -86,6 +86,7 @@ def test_current_versions_cover_every_component(vdirs):
         "benchmarks",
         "decisioning",
         "reason_statements",
+        "feedback",
         "grants",
         "code",
     } | {f"prompt:{r}" for r in roles}

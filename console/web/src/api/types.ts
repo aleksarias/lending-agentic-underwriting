@@ -356,16 +356,33 @@ export interface Denominator {
   candidates: { ref: string; auc: number | null; passed: boolean | null; ts: ISODate }[];
 }
 
+/** One slice of the production book: loans the decision API approved, booked, with outcomes once matured. */
+export interface ProductionRow {
+  /** "all" (overall), a model version or "legacy" (model), a booking month (vintage) or a risk band (band) */
+  key: string;
+  model_version: string | null;
+  n_booked: number;
+  n_matured: number;
+  n_defaults: number;
+  realized_rate: number | null;
+  /** Mean PD at decision time, matured loans with a model PD */
+  predicted_pd: number | null;
+  /** realized / predicted */
+  calibration_ratio: number | null;
+  /** Ranking among matured approved loans (null below the configured minimum or with one outcome only) */
+  auc: number | null;
+  brier: number | null;
+}
+
 export interface ProductionEvidence {
   available: true;
-  vintages: {
-    cohort: string;
-    model: ModelRef;
-    predicted: number;
-    realized_early: number | null;
-    realized_final: number | null;
-    n: number;
-  }[];
+  computed_at: ISODate | null;
+  definition_version: string;
+  as_of_month: string;
+  overall: ProductionRow | null;
+  models: ProductionRow[];
+  vintages: ProductionRow[];
+  bands: ProductionRow[];
 }
 
 export interface ProgressData {
@@ -664,6 +681,8 @@ export interface FairnessData {
   proxy_threshold: number;
   prohibited_features: string[];
   findings: ReportMeta[];
+  /** Approval and decline rates by group on actual decisions (estimated groups next to the synthetic truth) */
+  decisions: Unavailable | DecisionFairness;
 }
 
 // ------------------------------------------------------------------------------------------------ feed / vintage
@@ -673,10 +692,83 @@ export interface VintageData {
   cohorts: { cohort: string; n: number; curves: Record<string, number[]> }[]; // curves keyed by dpd, index = MOB-1
 }
 
+export interface DecisionFairness {
+  available: true;
+  computed_at: ISODate | null;
+  window_days: number | null;
+  n_decisions: number | null;
+  rows: {
+    attribute: string;
+    group: string;
+    method: "surname_estimate" | "synthetic_truth" | "application";
+    reference_group: string;
+    /** Probability-weighted count for estimates */
+    n: number | null;
+    approval_rate: number | null;
+    decline_rate: number | null;
+    air: number | null;
+    below_threshold: boolean;
+  }[];
+  method_note: string;
+}
+
+export interface ServicerFeed {
+  files: {
+    feed_file: string;
+    file_month: string | null;
+    status: "ingested" | "held";
+    records: number;
+    accepted: number;
+    quarantined: number;
+    restatements: number;
+    ingested_at: ISODate | null;
+    released_by: string | null;
+  }[];
+  held: string[];
+  quarantine: { total: number; by_reason: { reason: string; n: number }[]; recent: { feed_file: string; loan_id: string | null; reasons: string; ingested_at: ISODate | null }[] };
+  restatements: { total: number; recent: { loan_id: string; period_month: string; reported_month: string; dpd_before: number | null; dpd_after: number | null }[] };
+  /** Per reported month: loans reporting by status and delinquency bucket (aggregates only) */
+  book: {
+    period_month: string;
+    loans_reporting: number;
+    current: number;
+    dpd_30: number;
+    dpd_60: number;
+    dpd_90_plus: number;
+    forbearance: number;
+    paid_off: number;
+    charged_off: number;
+    other_terminal: number;
+    balance_outstanding: number;
+    new_bookings: number;
+  }[];
+  maturation: { recorded_at: ISODate; definition_version: string; as_of_month: string; booked: number; matured: number; new_matured: number; queued_cycle: boolean }[];
+}
+
+export interface ParityData {
+  available: true;
+  computed_at: ISODate | null;
+  window_days: number | null;
+  n_served: number | null;
+  rows: {
+    feature: string;
+    kind: "numeric" | "categorical";
+    in_serving_model: boolean;
+    psi: number | null;
+    status: "ok" | "warn" | "alert" | "missing";
+    null_rate_train: number | null;
+    null_rate_served: number | null;
+    mean_train: number | null;
+    mean_served: number | null;
+  }[];
+}
+
 export interface FeedData {
   live: boolean;
-  reason: string;
+  reason: string | null;
   requires: string[];
+  /** The loan status feed for loans the decision API approved; null before the first feed */
+  servicer: ServicerFeed | null;
   performance: {
     data_version: string | null;
     as_of_month: string | null;

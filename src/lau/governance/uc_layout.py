@@ -13,9 +13,20 @@ from lau.settings import Settings, WorkspaceState, get_settings, save_state
 from lau.store import LANDING_VOLUME, LocalStore, Store
 
 # Schemas that receive DataFrame writes need a landing volume for staged parquet.
-LANDING_SCHEMAS = ["raw", "curated", "labels", "feature_registry", "experiments", "holdout", "production", "ops"]
+LANDING_SCHEMAS = [
+    "raw",
+    "curated",
+    "labels",
+    "feature_registry",
+    "experiments",
+    "holdout",
+    "production",
+    "ops",
+    "simulation",
+]
 # The console snapshot (lau.console.snapshot): written by the harness identity, read by the console's ui identity.
 CONSOLE_VOLUME = "console"
+SERVICER_VOLUME = "servicer_feed"  # the simulated servicer's outbox (simulation schema)
 TAGS = "project = 'lau', managed_by = 'lending-agentic-underwriting'"
 
 
@@ -26,6 +37,7 @@ def schema_ddl(s: Settings) -> list[str]:
             "holdout": "Out-of-time holdout. Harness principal only.",
             "production": "Champion models and promotion records. Promoter principal only.",
             "ops": "Pipeline state, approvals, traces, cost log.",
+            "simulation": "Synthetic ground truth and the simulated loan servicer. Harness only; absent in production.",
         }.get(key, f"lau {key}")
         out.append(f"CREATE SCHEMA IF NOT EXISTS `{s.catalog}`.`{s.schema(key)}` COMMENT '{comment}'")
     for key in LANDING_SCHEMAS:
@@ -36,6 +48,10 @@ def schema_ddl(s: Settings) -> list[str]:
     out.append(
         f"CREATE VOLUME IF NOT EXISTS `{s.catalog}`.`{s.schema('ops')}`.`{CONSOLE_VOLUME}` "
         "COMMENT 'Console snapshot: tables the ui role can read, mirrored by the local console'"
+    )
+    out.append(
+        f"CREATE VOLUME IF NOT EXISTS `{s.catalog}`.`{s.schema('simulation')}`.`{SERVICER_VOLUME}` "
+        "COMMENT 'Simulated servicer: loan status feed files (JSON lines), read by the feed ingestion'"
     )
     return out
 

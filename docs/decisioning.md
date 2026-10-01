@@ -74,7 +74,8 @@ every figure.
 `lau decision originate` (and the `decisions` task of the daily job) sends one simulated month of applications per run.
 The simulated clock (`ops.sim_clock`) starts the month after the data's as-of month. Applications come from the same
 generator as the training data, seeded by the month, so a retried run sends identical requests; the applicants' latent
-risk goes to `ops.sim_truth` for the servicer simulator and never into a request. The transport is the endpoint when it
+risk, protected attributes and surname go to `simulation.truth` (harness only) for the servicer simulator and the
+fairness checks, and never into a request. The transport is the endpoint when it
 exists and otherwise the live decision model in process: the same registered artifact.
 
 ## Shadow-first rollouts

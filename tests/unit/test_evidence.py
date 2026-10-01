@@ -32,7 +32,10 @@ def test_run_all_writes_every_table_with_contract_columns(evidence):
     from lau.evidence import schemas
 
     st = evidence["store"]
+    production = {"production_evidence", "decision_fairness", "serving_parity"}  # skipped before decisions and a feed
     for table, n in evidence["counts"].items():
+        if table in production and n == 0:
+            continue
         assert n > 0, table
         want = {c for c, _ in schemas.TABLES[table]}
         cols = set(_read(st, table).columns)

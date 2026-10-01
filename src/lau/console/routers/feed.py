@@ -1,8 +1,9 @@
 """Console API: GET /api/feed (screen 11, loan status feed).
 
-There is no live servicing feed yet: performance arrives as batch data versions (ops.data_version). Vintage curves
-(ops.vintage_curves) show how cohorts mature under each benchmark threshold; label stats show what each definition
-counts as eligible and defaulted.
+`servicer`: the loan status feed for loans the decision API approved (files read, quarantine, restatements, the
+monthly book summary, maturation), or null before the first feed. Historical performance still arrives as batch data
+versions (ops.data_version); vintage curves (ops.vintage_curves) show how cohorts mature under each benchmark
+threshold; label stats show what each definition counts as eligible and defaulted.
 
 Contract: docs/console/contract.md and console/web/src/api/types.ts.
 """
@@ -17,9 +18,8 @@ from lau.console.util import api_router, integer, iso, num, read_table, short, t
 router = api_router()
 
 REQUIRES = [
-    "Servicing system change feed (loan status, days past due, balance) delivered daily",
-    "Lakeflow AUTO CDC bitemporal loan-status table",
-    "Data-quality expectations on the feed",
+    "Decisions on (synthetic) traffic: an approved policy, a built decision model, `lau decision originate`",
+    "The servicer's feed (`lau feed run`, or the daily job's feedback task)",
 ]
 
 
@@ -51,6 +51,9 @@ def _vintage() -> dict:
 
 @router.get("/feed")
 def feed() -> dict:
+    from lau.console.services import feedback
+
+    live = feedback.feed_live()
     data = ops.latest_data_version()
     stats = defs.label_stats_by_version()
     maturation = []
@@ -69,12 +72,15 @@ def feed() -> dict:
             }
         )
     return {
-        "live": False,
-        "reason": (
-            "Loan status arrives as batch data versions, not a live feed. Each load replaces the performance "
-            "history and triggers a pipeline rebuild."
+        "live": live is not None,
+        "reason": None
+        if live is not None
+        else (
+            "No loan status feed has arrived yet. Historical performance comes as batch data versions; the simulated "
+            "servicer reports on loans the decision API approved once synthetic traffic runs."
         ),
-        "requires": REQUIRES,
+        "requires": [] if live is not None else REQUIRES,
+        "servicer": live,
         "performance": {
             "data_version": text(data.get("data_version")) if data else None,
             "as_of_month": text(data.get("as_of_month")) if data else None,

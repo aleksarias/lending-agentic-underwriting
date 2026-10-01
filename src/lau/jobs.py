@@ -70,6 +70,14 @@ def main() -> None:
             print(f"no synthetic traffic today: {e}")  # until a person approves a policy and a build exists
             return
         decision_log.reconcile()  # decisions the endpoint made for anyone else (its inference table)
+    elif task == "feedback":
+        from lau.feedback import feed, production, servicer
+
+        servicer.run()  # the simulated servicer's feed for the newest completed simulated month (once)
+        result = feed.ingest()  # expectations, quarantine, bitemporal history, restatements
+        production.maturation_check()  # newly matured loans queue an improvement cycle
+        if result["held"]:
+            raise SystemExit(f"feed file(s) held for review: {result['held']} (lau feed release <file>)")
     elif task == "shadow":
         from lau.promotion.shadow import run_shadow
 

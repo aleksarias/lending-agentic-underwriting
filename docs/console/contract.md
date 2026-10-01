@@ -58,7 +58,7 @@ unknown ones, 403 for actions while disabled, all as `{"detail": "..."}`. Respon
 | `/decisions/search?q` | `{results: DecisionRow[]}` | ops.decisions | prefix of decision id or application id; at least 3 characters |
 | `/decisions/{decision_id}` | `DecisionDetail` | ops.decisions | reasons with the model input behind each (reviewers), notice content, versions, shadow score; never applicant inputs; 404 unknown |
 | `/decisions/{decision_id}/adverse-action` | `{decision_id, application_id, decision, decided_at, path, notice_required, principal_reasons[{rank, code, statement}], versions, caveat}` | ops.decisions | statements only, no feature names; counsel approves the notice itself |
-| `/progress` | `ProgressData` | improvement_ledger, benchmark_results, evaluations, experiment_counter, gate_results, cycles, cost_log, model_registry, harness_reference | |
+| `/progress` | `ProgressData` (`production`: matured-loan evidence overall, by deciding model, band and vintage, or Unavailable) | improvement_ledger, benchmark_results, evaluations, experiment_counter, gate_results, cycles, cost_log, model_registry, harness_reference, production_evidence | |
 | `/events?[types]&[definition]&[before]&[limit=100]` | `EventsPage` (ids unique; `next_before` is an opaque `timestamp~id` cursor to pass back as `before`, so ties at a page boundary are neither lost nor repeated; unknown definition 404) | assembled in Python from: active_definition, data_version, pipeline_state, cycles, evaluations, gate_results, approvals, definition_approvals, production.promotions, alerts, config_versions, experiments.reports, benchmark_results | newest first |
 | `/changes?from&to` | `ChangeSet` | active_definition/definition_versions, model_registry, config_versions, data_version, events | version-vector diff between two instants |
 | `/cycles` | `CycleSummary[]` | cycles | |
@@ -73,8 +73,9 @@ unknown ones, 403 for actions while disabled, all as `{"detail": "..."}`. Respon
 | `/models/{name}/{version}` | `ModelCard` | model_registry, evaluations, gate_results, experiments.reports, approvals, feature_registry.features, benchmark_results | |
 | `/performance?[def]` | `PerformanceData` | evaluations, gate_results, definition_versions, experiment_counter | `tests_since_reset` and `next_margin` for the selected definition; unknown def 404 |
 | `/evaluations/{eval_id}` | `EvaluationDetail` | evaluations.result_json | also `proxy_detail`, `prohibited_features_used`, `best_known` and `versions` as the harness stored them, fairness `n` and mean PD per group (group sizes are not stored) |
-| `/fairness?[def]` | `FairnessData` (unknown def 404) | evaluations (fairness), ops.proxy_scan, config protected_classes/thresholds, experiments.reports (kind=compliance) | |
-| `/feed` | `FeedData` | ops.data_version, ops.vintage_curves, ops.label_stats | live = false until the servicing feed exists |
+| `/fairness?[def]` | `FairnessData` (unknown def 404; `decisions`: rates and adverse impact ratios on actual decisions, estimated groups next to the synthetic truth) | evaluations (fairness), ops.proxy_scan, ops.decision_fairness, config protected_classes/thresholds, experiments.reports (kind=compliance) | |
+| `/feed` | `FeedData` (`servicer`: files read, quarantine by reason, restatements, monthly book by status, maturation; null before the first feed) | ops.feed_files, ops.feed_quarantine, ops.feed_restatements, ops.feed_summary, ops.maturation_events, ops.data_version, ops.vintage_curves, ops.label_stats | aggregates and file-level records only: the loan book is in curated |
+| `/parity` | `Unavailable \| ParityData` | ops.serving_parity (latest run) | PSI, null rates and means, training against the last 30 days of decisions |
 | `/catalog?[def]` | `CatalogData` (unknown def 404) | curated.data_catalog, curated.field_lineage | |
 | `/catalog/{variable}?[def]` | `CatalogVariable` | same | |
 | `/cashflow/cohorts` | `CashflowCohorts` | ops.cashflow_cohorts | |

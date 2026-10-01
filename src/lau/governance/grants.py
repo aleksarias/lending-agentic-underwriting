@@ -10,6 +10,9 @@ Roles:
   agent    - identity for every agent tool call. Read-only curated/labels (active views only), r/w experiments
              and feature_registry. No grants on raw, holdout, production, ops.
   promoter - writes `production`, only via `lau promote` after a recorded human approval.
+  ui       - the console: read-only, metadata and aggregates.
+`simulation` (synthetic ground truth, the simulated servicer) is the harness's alone: no agent, console or promoter
+grant, so latent risk and protected attributes of synthetic applicants never reach a model, an agent or a screen.
 """
 
 from __future__ import annotations
@@ -55,7 +58,7 @@ GRANTS: list[Grant] = [
     Grant("harness", "CATALOG", privileges=("USE CATALOG",)),
     *[
         Grant("harness", "SCHEMA", s, privileges=ALL)
-        for s in ("curated", "labels", "feature_registry", "experiments", "holdout", "ops")
+        for s in ("curated", "labels", "feature_registry", "experiments", "holdout", "ops", "simulation")
     ],
     Grant("harness", "SCHEMA", "raw", privileges=("USE SCHEMA", "SELECT", "READ VOLUME")),
     Grant("harness", "SCHEMA", "production", privileges=RO_SCHEMA),

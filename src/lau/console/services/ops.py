@@ -624,7 +624,13 @@ def alerts() -> list[dict]:
     if df.empty:
         return []
     runs = monitoring_runs()
-    latest = pd.Timestamp(runs[0]["ts"]) if runs else df["ts"].max()
+    latest = {"monitoring": pd.Timestamp(runs[0]["ts"]) if runs else df["ts"].max()}
+    for source, table, column in (
+        ("production", "maturation_events", "recorded_at"),
+        ("feed", "feed_files", "ingested_at"),
+    ):
+        run = read_table(deps.ui_store(), "ops", table, columns=[column], ts=[column])
+        latest[source] = run[column].max() if len(run) else None
     ack = acks()
     out = []
     for r in df.sort_values("ts", ascending=False).to_dict("records"):
@@ -644,10 +650,23 @@ def alerts() -> list[dict]:
                 "ack_at": (ack.get(aid) or {}).get("at"),
                 "ack_note": (ack.get(aid) or {}).get("note"),
                 "title": alert_title(str(r["kind"]), str(r["subject"]), num(r.get("value")) or 0.0),
-                "current": abs((pd.Timestamp(r["ts"]) - latest).total_seconds()) < 2,
+                "current": _is_current(r, latest),
             }
         )
     return out
+
+
+ALERT_SOURCES = {"production_default_rate": "production", "feed_held": "feed"}  # every other kind: monitoring
+
+
+def _is_current(r: dict, latest: dict) -> bool:
+    """Raised by the latest run of whatever raises this kind of alert (monitoring, maturation check, feed read)."""
+    when = latest.get(ALERT_SOURCES.get(str(r["kind"]), "monitoring"))
+    if when is None or pd.isna(when):
+        return False
+    if ALERT_SOURCES.get(str(r["kind"])) == "feed":
+        return True  # a held file stays an open problem until it is released (and acknowledged)
+    return abs((pd.Timestamp(r["ts"]) - pd.Timestamp(when)).total_seconds()) < 2
 
 
 def alert_title(kind: str, subject: str, value: float) -> str:
@@ -658,6 +677,10 @@ def alert_title(kind: str, subject: str, value: float) -> str:
         return f"{what} distribution shifted (PSI {value:.3f})"
     if kind == "default_rate":
         return f"Observed default rate {value:+.0%} versus expected"
+    if kind == "production_default_rate":
+        return f"Matured production loans default {value:+.0%} versus the PD they were approved at"
+    if kind == "feed_held":
+        return f"Feed file held for review: {subject} ({value:.0%} of records failed the checks)"
     return f"{kind.replace('_', ' ').capitalize()}: {what} ({value:.3f})"
 
 

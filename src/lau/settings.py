@@ -35,6 +35,7 @@ class SchemaNames(_Strict):
     holdout: str
     production: str
     ops: str
+    simulation: str
 
 
 class WarehouseCfg(_Strict):
@@ -108,6 +109,7 @@ class Settings:
         self.synth = _load_yaml("synth.yaml")
         self.masking = _load_yaml("masking.yaml")
         self.decisioning = _load_yaml("decisioning.yaml")
+        self.feedback = _load_yaml("feedback.yaml")
         self.state = load_state()
 
     # ---- naming -------------------------------------------------------------------------------------

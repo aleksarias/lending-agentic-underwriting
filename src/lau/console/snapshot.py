@@ -34,6 +34,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from lau.settings import get_settings
+from lau.volumes import LocalVolume, UCVolume, Volume  # noqa: F401 - re-exported for callers and tests
 
 log = logging.getLogger(__name__)
 
@@ -44,57 +45,15 @@ UI_SCHEMAS = ("ops", "experiments", "feature_registry", "production")
 MAX_ROWS = 200_000
 SHADOW_RUNS_KEPT = 3  # row-level shadow scores: only the newest runs (the console shows aggregates)
 DECISION_DAYS_KEPT = 90  # the decision log is append-only and grows daily: the console needs recent decisions
-# Never copied to your machine: raw request payloads (the endpoint's inference table) and the simulator's truth.
+# Never copied to your machine: raw request payloads (the endpoint's inference table). The simulator's truth lives in
+# the simulation schema, which the console identity cannot read at all.
 SNAPSHOT_EXCLUDED_SUFFIXES = ("_payload",)
-SNAPSHOT_EXCLUDED = {("ops", "sim_truth")}
+SNAPSHOT_EXCLUDED: set[tuple[str, str]] = set()
 LIVE_TRACE_ROWS = 400
 
 
 # ------------------------------------------------------------------------------------------------------- volume
-class Volume:
-    """Files in the console volume."""
-
-    def read(self, rel: str) -> bytes | None:  # pragma: no cover - interface
-        raise NotImplementedError
-
-    def write(self, rel: str, data: bytes) -> None:  # pragma: no cover - interface
-        raise NotImplementedError
-
-
-class LocalVolume(Volume):
-    """A folder standing in for the volume (local backend, tests)."""
-
-    def __init__(self, root: Path) -> None:
-        self.root = Path(root)
-
-    def read(self, rel: str) -> bytes | None:
-        p = self.root / rel
-        return p.read_bytes() if p.is_file() else None
-
-    def write(self, rel: str, data: bytes) -> None:
-        p = self.root / rel
-        p.parent.mkdir(parents=True, exist_ok=True)
-        tmp = p.with_suffix(p.suffix + ".tmp")
-        tmp.write_bytes(data)
-        tmp.replace(p)
-
-
-class UCVolume(Volume):
-    """The Unity Catalog volume through the Files API (no SQL warehouse involved)."""
-
-    def __init__(self, w, base: str) -> None:
-        self.w, self.base = w, base.rstrip("/")
-
-    def read(self, rel: str) -> bytes | None:
-        from databricks.sdk.errors import NotFound
-
-        try:
-            return self.w.files.download(f"{self.base}/{rel}").contents.read()
-        except NotFound:
-            return None
-
-    def write(self, rel: str, data: bytes) -> None:
-        self.w.files.upload(f"{self.base}/{rel}", io.BytesIO(data), overwrite=True)
+# Volume classes live in lau.volumes (shared with the simulated servicer's feed).
 
 
 def volume_path() -> str:

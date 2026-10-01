@@ -58,6 +58,7 @@ export const useFeed = () => useQ<T.FeedData>(["feed"], "/feed");
 export const useCatalog = (definition?: string) => useQ<T.CatalogData>(["catalog", definition], "/catalog", { def: definition });
 export const useVariable = (variable: string | undefined, definition?: string) =>
   useQ<T.CatalogVariable>(["variable", variable, definition], `/catalog/${seg(variable ?? "")}`, { def: definition }, undefined, !!variable);
+export const useParity = () => useQ<T.Unavailable | T.ParityData>(["parity"], "/parity");
 export const useCashflowCohorts = () => useQ<T.CashflowCohorts>(["cashflow"], "/cashflow/cohorts");
 export const useFeatures = () => useQ<T.FeatureRow[]>(["features"], "/features");
 export const useAgents = () => useQ<T.AgentInfo[]>(["agents"], "/agents");

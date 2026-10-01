@@ -11,7 +11,7 @@ from __future__ import annotations
 import pandas as pd
 
 from lau.console import deps
-from lau.console.services import config, reports
+from lau.console.services import config, feedback, reports
 from lau.console.services import definitions as defs
 from lau.console.util import DEF_PARAM, api_router, boolean, iso, loads, num, read_table, sql_str, table_exists, text
 
@@ -109,4 +109,5 @@ def fairness(version: str | None = DEF_PARAM) -> dict:
         "proxy_threshold": float(th.get("proxy_auc_flag", 0.65)),
         "prohibited_features": [str(x) for x in prot.get("prohibited_features") or []],
         "findings": findings,
+        "decisions": feedback.decision_fairness(),
     }

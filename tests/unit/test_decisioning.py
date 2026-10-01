@@ -207,49 +207,15 @@ def test_invalid_policies_are_rejected(cfg_dir):
 
 # ---- build, traffic, log, rollouts (one shared setup) ---------------------------------------------------------------
 @pytest.fixture(scope="module")
-def decisioning(lake, cfg_dir):
-    """An approved policy, two production champions (v_a serving), small traffic settings."""
-    from lau.data.features import load_dev_frame
-    from lau.decision import policy
-    from lau.definition.registry import active_version
-    from lau.modeling import registry_io
-    from lau.modeling.model import PDModel
-    from lau.modeling.search_space import defaults
+def decisioning(decision_stack):
+    """The shared stack (approved policy, champions a and b, a serving) with small traffic settings."""
     from lau.settings import get_settings
-    from lau.store import get_store
 
-    st = get_store("harness")
-    version = active_version(st)
-    dev = load_dev_frame(st, version, "test")
-    train = dev[dev["split"] == "train"]
-    prod = registry_io.production_model_name()
-    feats = {
-        "a": ["bureau_score", "dti", "util_revolving", "inq_6m", "pmt_to_income"],
-        "b": ["bureau_score", "dti", "util_revolving", "pmt_to_income", "cf_nsf_count_6m", "cf_income_cv_6m"],
-    }
-    versions = {}
-    for key, cols in feats.items():
-        model = PDModel("logreg", defaults("logreg"), cols, [], version).fit(train, train["label"].to_numpy())
-        _, mv = registry_io.log_candidate(model, {}, {"author": "test"}, train, role="harness")
-        with registry_io.mlflow_session("promoter") as c:
-            try:
-                c.create_registered_model(prod)
-            except Exception:  # noqa: BLE001, S110 - exists
-                pass
-            pv = c.copy_model_version(registry_io.candidate_uri(mv), prod)
-            c.set_model_version_tag(prod, pv.version, "definition_version", version)
-            c.set_model_version_tag(prod, pv.version, "lau_kind", "champion")
-        versions[key] = str(pv.version)
-    with registry_io.mlflow_session("promoter") as c:
-        c.set_registered_model_alias(prod, registry_io.SERVING_ALIAS, versions["a"])
-    p = policy.load_policy(cfg_dir / "policy.yaml")
-    policy.record_approval(p, "alice", "initial policy reviewed")
-    policy.apply(cfg_dir / "policy.yaml", by="alice")
     s = get_settings()
     saved = json.loads(json.dumps(s.decisioning))
     s.decisioning["traffic"]["applications_per_month"] = 120
     s.decisioning["rollout"]["min_shadow_decisions"] = 50
-    yield {"version": version, **versions}
+    yield decision_stack
     s.decisioning.clear()
     s.decisioning.update(saved)
 
@@ -293,8 +259,9 @@ def test_originate_decides_a_simulated_month_and_logs_every_decision_once(decisi
     st = get_store("harness")
     inputs = st.query(f"SELECT * FROM {st.fq('curated', 'decision_inputs')}")
     assert set(mine["decision_id"]) <= set(inputs["decision_id"])
-    truth = st.query(f"SELECT * FROM {st.fq('ops', 'sim_truth')} WHERE sim_month = '{month}'")
-    assert len(truth) == 120  # latent risk for the servicer simulator; never in a request
+    truth = st.query(f"SELECT * FROM {st.fq('simulation', 'truth')} WHERE sim_month = '{month}'")
+    assert len(truth) == 120  # latent risk, protected attributes, surname: harness only, never in a request
+    assert not set(json.loads(inputs["application_json"].iloc[0])) & {"surname", "race_ethnicity", "sex", "age"}
     one = inputs[inputs["decision_id"] == mine["decision_id"].iloc[0]].iloc[0]
     assert "latent_risk" not in json.loads(one["application_json"])
     # logging the same decisions again adds nothing

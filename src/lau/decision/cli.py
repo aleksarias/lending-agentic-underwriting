@@ -17,6 +17,7 @@ policy_app = typer.Typer(
 )
 decision_app = typer.Typer(no_args_is_help=True, help="Decision model and endpoint, synthetic traffic, release checks.")
 rollout_app = typer.Typer(no_args_is_help=True, help="Shadow-first rollouts of promoted champions.")
+feed_app = typer.Typer(no_args_is_help=True, help="Loan status feed: simulated servicer, ingestion, maturation.")
 
 
 def _cli():
@@ -240,3 +241,43 @@ def rollout_rollback(
 
     cli = _cli()
     cli._action_done(cli._guard(actions.rollout_rollback, rollout_id, reason, by or getpass.getuser()), as_json)
+
+
+# ---- loan status feed ------------------------------------------------------------------------------------------------
+@feed_app.command("run")
+def feed_run() -> None:
+    """Write the simulated servicer's feed for the newest completed month, ingest new files, check maturation."""
+    from lau.feedback import feed, production, servicer
+
+    cli = _cli()
+    cli._guard(servicer.run, cli._log)
+    result = cli._guard(feed.ingest, cli._log)
+    cli._guard(production.maturation_check, cli._log)
+    if result["held"]:
+        cli._fail(f"held for review: {', '.join(result['held'])} (lau feed release <file>)")
+
+
+@feed_app.command("status")
+def feed_status() -> None:
+    """Files read, quarantined records, restatements and maturity of the production book."""
+    from lau.feedback import feed
+    from lau.store import get_store
+
+    st = get_store("harness")
+    out: dict = {"held": feed.held_files(), "pending": feed.pending_files()}
+    for table in ("feed_files", "maturation_events"):
+        if st.table_exists("ops", table):
+            out[table] = st.query(f"SELECT * FROM {st.fq('ops', table)} ORDER BY 1 DESC LIMIT 5").to_dict("records")
+    _print(out)
+
+
+@feed_app.command("release")
+def feed_release(feed_file: str, by: str = typer.Option("", "--by")) -> None:
+    """After reviewing a held file's quarantine, ingest its valid records (the bad ones stay quarantined)."""
+    from lau.feedback import feed
+
+    cli = _cli()
+    try:
+        cli._guard(feed.release, feed_file, by or getpass.getuser(), cli._log)
+    except ValueError as e:
+        cli._fail(str(e))
