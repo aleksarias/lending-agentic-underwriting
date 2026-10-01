@@ -69,7 +69,7 @@ export function ProxyHeatmap({ cells, threshold }: { cells: Cell[]; threshold: n
         Each class has a pooled column (any protected group against everyone else) and one column per group (that group against the reference group). A feature that tracks one group can fall
         below the threshold when groups are pooled, so both are scanned.
       </div>
-      <div className="table-wrap">
+      <div className="table-wrap" tabIndex={0} role="region" aria-label="Table (scrolls sideways when narrow)">
         <table className="fairness-heat">
           <caption className="sr-only">Proxy AUC by feature and protected group. Flagged cells are labeled.</caption>
           <thead>

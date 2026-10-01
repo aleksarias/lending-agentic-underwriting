@@ -1,7 +1,7 @@
 /** How a variable's values are distributed: percentiles for a numeric variable, the most common values for a categorical one. */
 import type { CatalogVariable } from "../../api/types";
 import { fmtNum, fmtPct } from "../../lib/format";
-import { HBars } from "../Models/shared";
+import { HBars } from "../shared";
 import { Card, EmptyState, KeyValue, Section } from "../ui";
 import { RangeStrip, fmtVal } from "./RangeStrip";
 

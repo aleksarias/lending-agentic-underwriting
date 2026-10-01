@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { CatalogData, Tile } from "../../api/types";
 import { fmtNum } from "../../lib/format";
-import { plural } from "../Models/shared";
+import { plural } from "../shared";
 import type { Limits } from "../Performance/thresholds";
 import { Card, EmptyState, Section, Tiles } from "../ui";
 import { CatalogTable, availabilityLabel, psiBand, sourceLabel } from "./CatalogTable";

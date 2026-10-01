@@ -6,7 +6,7 @@
 import { Link } from "react-router-dom";
 import { useDefinitions, useModels, usePerformance, useProgress, useSettings, useStatus } from "../api/hooks";
 import type { DefinitionRef, DefinitionVersion, Denominator, PerformanceData, Tile, Unavailable } from "../api/types";
-import { DefinitionSelect, isBaselineRef, modelOfRef, pickDefinition, plural, useDefinitionParam, definitionRefOf } from "../components/Models/shared";
+import { DefinitionSelect, isBaselineRef, modelOfRef, pickDefinition, plural, useDefinitionParam, definitionRefOf } from "../components/shared";
 import { EvaluationsTable } from "../components/Performance/EvaluationsTable";
 import { HoldoutSection } from "../components/Performance/HoldoutSection";
 import { MarginLedgerChart } from "../components/Performance/MarginLedgerChart";

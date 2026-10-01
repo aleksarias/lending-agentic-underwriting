@@ -1,14 +1,14 @@
 /**
- * Small building blocks shared by the Models, Performance, Fairness and Data screens (and their detail screens):
+ * Building blocks shared across screens (Models, Performance, Fairness, Data, Evaluation and Variable details, ...):
  * model status pill, definition selector and URL state, horizontal bars with exact values, and 404 handling.
- * If any of these proves useful elsewhere it can move into components/ui.tsx.
+ * Promoted from components/Models once most screens used them; generic primitives stay in components/ui.tsx.
  */
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import type { DefinitionRef, DefinitionVersion, ModelRef, ModelStatus, ModelVersion, Tone } from "../../api/types";
-import { checkLabel, fmtNum } from "../../lib/format";
-import { DefinitionBadge, EmptyState, ErrorState, Loading, Pill } from "../ui";
-import "./models.css";
+import type { DefinitionRef, DefinitionVersion, ModelRef, ModelStatus, ModelVersion, Tone } from "../api/types";
+import { checkLabel, fmtNum } from "../lib/format";
+import { DefinitionBadge, EmptyState, ErrorState, Loading, Pill } from "./ui";
+import "./Models/models.css";
 
 // ------------------------------------------------------------------------------------------------ model status
 const STATUS_TONE: Record<ModelStatus, Tone | "info"> = {

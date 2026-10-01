@@ -54,3 +54,7 @@ reports/demo/
 console/web/node_modules/
 console/web/dist/
 console/web/*.tsbuildinfo
+
+# Playwright
+console/web/test-results/
+console/web/playwright-report/

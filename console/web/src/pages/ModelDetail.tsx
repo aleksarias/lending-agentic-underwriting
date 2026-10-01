@@ -12,7 +12,7 @@ import { EvaluationsSection } from "../components/ModelDetail/EvaluationsSection
 import { FeatureImportance } from "../components/ModelDetail/FeatureImportance";
 import { LineageFlow } from "../components/ModelDetail/LineageFlow";
 import { benchLines, focusLine, noiseVerdict, vsBestSentence, type BenchLine } from "../components/ModelDetail/benchmark";
-import { DetailView, NotFoundState, StatusPill, definitionRefOf, isBaselineRef } from "../components/Models/shared";
+import { DetailView, NotFoundState, StatusPill, definitionRefOf, isBaselineRef } from "../components/shared";
 import { Card, DefinitionBadge, EmptyState, ErrorState, KeyValue, Loading, Page, PageHeader, Section, Tiles, links } from "../components/ui";
 import { fmtAuc, fmtDiff } from "../lib/format";
 

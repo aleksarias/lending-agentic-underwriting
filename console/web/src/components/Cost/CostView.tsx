@@ -237,7 +237,7 @@ function BillingActuals({ b }: { b: NonNullable<CostData["billing"]> }) {
         ]}
       />
       {b.by_product.length > 0 && (
-        <div className="table-wrap" style={{ marginTop: 10 }}>
+        <div className="table-wrap" tabIndex={0} role="region" aria-label="Table (scrolls sideways when narrow)" style={{ marginTop: 10 }}>
           <table className="data">
             <thead>
               <tr>

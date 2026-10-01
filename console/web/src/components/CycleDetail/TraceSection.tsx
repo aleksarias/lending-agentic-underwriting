@@ -98,7 +98,7 @@ export function TraceSection({ trace }: { trace: TraceEntry[] }) {
       {rows.length === 0 ? (
         <EmptyState title="No trace rows match these filters" />
       ) : (
-        <div className="table-wrap">
+        <div className="table-wrap" tabIndex={0} role="region" aria-label="Table (scrolls sideways when narrow)">
           <table className="data cycle-detail-trace">
             <thead>
               <tr>

@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import type { GateSummary, ModelRef, PerformanceData } from "../../api/types";
 import { fmtAuc, fmtDateTime, fmtDiff, refLabel } from "../../lib/format";
 import { DataTable, EmptyState, ModelBadge, Meter, Pill, Section, links, Card, type Column } from "../ui";
-import { checkName, plural } from "../Models/shared";
+import { checkName, plural } from "../shared";
 
 export function HoldoutSection({ holdout, modelOf }: { holdout: PerformanceData["holdout"]; modelOf?: (ref: string) => ModelRef | undefined }) {
   const { used, budget, gates } = holdout;

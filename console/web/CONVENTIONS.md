@@ -12,6 +12,9 @@ Read this before building a screen. The console must read as one product, not a 
 - `src/pages/Overview.tsx` and `src/pages/Progress.tsx` are finished screens built on real data. Match their structure,
   density, wording and use of shared components. Progress shows how to present a matrix with intervals, paired
   differences (`IntervalChart`), URL-state tabs (`?bench=`), guardrail small multiples, and an `Unavailable` section.
+- Cross-screen helpers in `src/components/shared.tsx`: `DefinitionSelect` + `useDefinitionParam` (definition in the URL),
+  model status pills, `HBars` (bars with exact values), `plural`, 404 handling. Screen tests: `npm run e2e`
+  (Playwright + axe at desktop and 400 px; no page errors, no sideways scroll, no serious accessibility findings).
 - Shared lists in `src/components/lists.tsx`: `EventList` (the event timeline, with proposed/measured tags),
   `StageList` (pipeline freshness), `WaitingList` (decisions waiting on people). Use them wherever those appear.
 - Interval text and tone: `fmtInterval(i)` gives "+0.103, 95% CI +0.077 to +0.129"; `intervalTone(i)` gives good when

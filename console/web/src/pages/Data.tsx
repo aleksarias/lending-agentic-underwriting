@@ -9,7 +9,7 @@ import { CashflowExplorer } from "../components/Data/CashflowExplorer";
 import { CatalogSection } from "../components/Data/CatalogSection";
 import { ParitySection } from "../components/Data/ParitySection";
 import "../components/Data/data.css";
-import { DefinitionSelect, definitionRefOf, pickDefinition, plural, useDefinitionParam } from "../components/Models/shared";
+import { DefinitionSelect, definitionRefOf, pickDefinition, plural, useDefinitionParam } from "../components/shared";
 import { limitsFrom } from "../components/Performance/thresholds";
 import { Page, PageHeader, QueryView } from "../components/ui";
 

@@ -8,7 +8,7 @@ import { useDefinitions, useSettings, useVariable } from "../api/hooks";
 import type { CatalogVariable, DefinitionRef, Tile } from "../api/types";
 import { psiBand, sourceLabel } from "../components/Data/CatalogTable";
 import { classLabel } from "../components/Fairness/labels";
-import { DefinitionSelect, DetailView, NotFoundState, definitionRefOf, pickDefinition, useDefinitionParam } from "../components/Models/shared";
+import { DefinitionSelect, DetailView, NotFoundState, definitionRefOf, pickDefinition, useDefinitionParam } from "../components/shared";
 import { limitsFrom, type Limits } from "../components/Performance/thresholds";
 import { Distribution } from "../components/VariableDetail/Distribution";
 import { RiskScreens } from "../components/VariableDetail/RiskScreens";

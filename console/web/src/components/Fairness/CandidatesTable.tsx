@@ -3,7 +3,7 @@ import { Fragment, useState } from "react";
 import { Link } from "react-router-dom";
 import type { FairnessData, ModelRef } from "../../api/types";
 import { fmtAuc, fmtDateTime, fmtPct, refLabel } from "../../lib/format";
-import { isBaselineRef } from "../Models/shared";
+import { isBaselineRef } from "../shared";
 import { ModelBadge, Pill, links } from "../ui";
 import { classLabel, comparison, groupLabel } from "./labels";
 import "./fairness.css";
@@ -29,7 +29,7 @@ export function CandidatesTable({ candidates, threshold, modelOf }: { candidates
       return next;
     });
   return (
-    <div className="table-wrap">
+    <div className="table-wrap" tabIndex={0} role="region" aria-label="Table (scrolls sideways when narrow)">
       <table className="data">
         <thead>
           <tr>

@@ -2,7 +2,7 @@
 import { Link } from "react-router-dom";
 import type { EvaluationDetail, Tile } from "../../api/types";
 import { fmtNum, fmtPct } from "../../lib/format";
-import { HBars } from "../Models/shared";
+import { HBars } from "../shared";
 import type { Limits } from "../Performance/thresholds";
 import { Banner, Card, DataTable, EmptyState, Pill, Section, Tiles, links, type Column } from "../ui";
 import "./evaluation.css";

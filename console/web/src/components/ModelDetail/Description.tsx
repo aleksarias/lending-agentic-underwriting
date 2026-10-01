@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import type { ModelCard } from "../../api/types";
-import { modelTypeLabel, plural } from "../Models/shared";
+import { modelTypeLabel, plural } from "../shared";
 import { Card, CodeBlock, EmptyState, KeyValue, KindTag, Section, links } from "../ui";
 import "./modeldetail.css";
 

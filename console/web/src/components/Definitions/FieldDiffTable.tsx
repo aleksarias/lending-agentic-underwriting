@@ -4,7 +4,7 @@ import { fieldLabel, fieldValue } from "./fields";
 
 export function FieldDiffTable({ diffs }: { diffs: FieldDiff[] }) {
   return (
-    <div className="table-wrap">
+    <div className="table-wrap" tabIndex={0} role="region" aria-label="Table (scrolls sideways when narrow)">
       <table className="data">
         <thead>
           <tr>

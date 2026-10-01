@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import type { DefinitionRef, DefinitionVersion, ModelVersion } from "../../api/types";
 import { fmtAuc, fmtDate, fmtDateTime, shortVersion } from "../../lib/format";
 import { DataTable, DefinitionBadge, ModelBadge, Pill, Section, links, type Column } from "../ui";
-import { StatusPill, STATUS_ORDER, StopRowClick, modelTypeLabel, plural } from "./shared";
+import { StatusPill, STATUS_ORDER, StopRowClick, modelTypeLabel, plural } from "../shared";
 
 export interface ModelGroupProps {
   /** definition_version of the group; "" when a model has no definition recorded */

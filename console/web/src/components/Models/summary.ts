@@ -2,7 +2,7 @@
 import type { ModelRef, ModelVersion, ProgressData, Tile } from "../../api/types";
 import { fmtAuc } from "../../lib/format";
 import { links } from "../ui";
-import { plural } from "./shared";
+import { plural } from "../shared";
 
 export function summarySentence(
   list: ModelVersion[],

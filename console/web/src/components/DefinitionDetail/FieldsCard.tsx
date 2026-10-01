@@ -5,7 +5,7 @@ import { FIELD_HELP, fieldLabel, fieldValue } from "../Definitions/fields";
 export function FieldsCard({ def }: { def: DefinitionVersion }) {
   const entries = Object.entries(def.fields);
   return (
-    <div className="table-wrap">
+    <div className="table-wrap" tabIndex={0} role="region" aria-label="Table (scrolls sideways when narrow)">
       <table className="data">
         <thead>
           <tr>

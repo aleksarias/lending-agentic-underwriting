@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import type { EvaluationDetail, ModelVersion } from "../../api/types";
 import { fmtAuc } from "../../lib/format";
 import { FeatureImportance } from "../ModelDetail/FeatureImportance";
-import { modelTypeLabel, plural } from "../Models/shared";
+import { modelTypeLabel, plural } from "../shared";
 import { Card, KeyValue, ModelBadge, Section, links } from "../ui";
 import "./evaluation.css";
 

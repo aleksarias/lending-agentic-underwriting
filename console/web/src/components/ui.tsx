@@ -279,7 +279,7 @@ export function DataTable<R>(props: { rows: R[]; columns: Column<R>[]; rowKey: (
   }, [props.rows, props.columns, sort]);
   if (!props.rows.length) return <>{props.empty ?? <EmptyState title="Nothing to show" />}</>;
   return (
-    <div className="table-wrap" style={props.maxHeight ? { maxHeight: props.maxHeight, overflowY: "auto" } : undefined}>
+    <div className="table-wrap" tabIndex={0} role="region" aria-label="Table (scrolls sideways when narrow)" style={props.maxHeight ? { maxHeight: props.maxHeight, overflowY: "auto" } : undefined}>
       <table className="data">
         <thead>
           <tr>

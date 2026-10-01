@@ -4,7 +4,7 @@
  * or below the strip so they never overlap. Values are printed, so the picture never stands alone.
  */
 import { fmtNum } from "../../lib/format";
-import { useElementWidth } from "../Models/shared";
+import { useElementWidth } from "../shared";
 import { useChartColors } from "../charts";
 import "./variable.css";
 

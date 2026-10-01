@@ -5,7 +5,7 @@
 import { Link } from "react-router-dom";
 import type { EvaluationSummary, ModelRef } from "../../api/types";
 import { fmtAuc, fmtDateTime, fmtDiff, refLabel } from "../../lib/format";
-import { WrapHeader as H, isBaselineRef } from "../Models/shared";
+import { WrapHeader as H, isBaselineRef } from "../shared";
 import { DataTable, ModelBadge, Pill, links, type Column } from "../ui";
 
 const passText =

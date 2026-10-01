@@ -1,7 +1,7 @@
 /** Stability: AUC by time slice and by segment, thin-file performance, and score drift. */
 import type { EvaluationDetail, Tile } from "../../api/types";
 import { fmtAuc, fmtDiff, titleCase } from "../../lib/format";
-import { HBars, type HBarRow } from "../Models/shared";
+import { HBars, type HBarRow } from "../shared";
 import type { Limits } from "../Performance/thresholds";
 import { Card, EmptyState, Section, Tiles } from "../ui";
 import "./evaluation.css";

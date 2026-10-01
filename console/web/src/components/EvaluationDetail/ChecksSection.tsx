@@ -1,6 +1,6 @@
 /** The harness checks for this evaluation: failed first, each with the rule, the measurement and its limit. */
 import type { EvaluationDetail } from "../../api/types";
-import { checkName } from "../Models/shared";
+import { checkName } from "../shared";
 import type { Limits } from "../Performance/thresholds";
 import { Card, DataTable, Pill, Section, type Column } from "../ui";
 import { CHECK_RULE, measuredFor } from "./checks";

@@ -60,7 +60,7 @@ function LeafTable({ path, data }: { path: string[]; data: Dict }) {
   });
   const anyHint = rows.some((r) => r.hint);
   return (
-    <div className="table-wrap" style={{ border: 0 }}>
+    <div className="table-wrap" tabIndex={0} role="region" aria-label="Table (scrolls sideways when narrow)" style={{ border: 0 }}>
       <table className="data" style={{ tableLayout: "fixed", minWidth: 560 }}>
         <colgroup>
           <col style={{ width: anyHint ? "34%" : "50%" }} />
@@ -98,7 +98,7 @@ function MatrixTable({ path, data }: { path: string[]; data: Record<string, Dict
   for (const row of Object.values(data)) for (const k of Object.keys(row)) if (!cols.includes(k)) cols.push(k);
   const rowLabel = (k: string) => metaFor([...path, k])?.keyLabel?.(k) ?? humanize(k);
   return (
-    <div className="table-wrap" style={{ border: 0 }}>
+    <div className="table-wrap" tabIndex={0} role="region" aria-label="Table (scrolls sideways when narrow)" style={{ border: 0 }}>
       <table className="data">
         <thead>
           <tr>

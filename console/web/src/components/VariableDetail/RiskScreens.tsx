@@ -4,7 +4,7 @@ import type { CatalogVariable } from "../../api/types";
 import { fmtAuc } from "../../lib/format";
 import { availabilityLabel } from "../Data/CatalogTable";
 import { classLabel } from "../Fairness/labels";
-import { HBars } from "../Models/shared";
+import { HBars } from "../shared";
 import type { Limits } from "../Performance/thresholds";
 import { Card, KeyValue, Pill, Section } from "../ui";
 import "./variable.css";

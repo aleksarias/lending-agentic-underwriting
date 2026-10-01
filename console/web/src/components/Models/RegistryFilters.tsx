@@ -1,7 +1,7 @@
 /** Status and definition filters for the registry; their state lives in the URL (the page passes `onChange`). */
 import type { ModelStatus } from "../../api/types";
 import { shortVersion } from "../../lib/format";
-import { plural } from "./shared";
+import { plural } from "../shared";
 import "./models.css";
 
 export function RegistryFilters(props: {

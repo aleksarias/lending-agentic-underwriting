@@ -10,7 +10,7 @@ import type { DefinitionVersion, ModelStatus, ModelVersion, ProgressData } from 
 import { ModelGroup } from "../components/Models/ModelGroup";
 import { RegistryFilters } from "../components/Models/RegistryFilters";
 import { registryTiles, summarySentence } from "../components/Models/summary";
-import { STATUS_HELP, STATUS_ORDER, definitionRefOf } from "../components/Models/shared";
+import { STATUS_HELP, STATUS_ORDER, definitionRefOf } from "../components/shared";
 import { DefinitionBadge, EmptyState, ErrorState, Loading, Page, PageHeader, Section, Tiles } from "../components/ui";
 import { shortVersion } from "../lib/format";
 

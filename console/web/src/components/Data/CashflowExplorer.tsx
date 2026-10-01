@@ -5,7 +5,7 @@
 import type { CashflowCohorts } from "../../api/types";
 import { fmtNum, fmtPct, fmtPp, fmtUsd } from "../../lib/format";
 import { LineSeriesChart } from "../charts";
-import { WrapHeader as H } from "../Models/shared";
+import { WrapHeader as H } from "../shared";
 import { Card, DataTable, EmptyState, Section, TimeAgo, type Column } from "../ui";
 import "./data.css";
 

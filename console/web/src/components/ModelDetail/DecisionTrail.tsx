@@ -2,7 +2,7 @@
 import { Link } from "react-router-dom";
 import type { ApprovalRecord, GateSummary, ModelCard, ReportMeta } from "../../api/types";
 import { fmtAuc, fmtDateTime, fmtDiff, reviewTone, titleCase } from "../../lib/format";
-import { checkName } from "../Models/shared";
+import { checkName } from "../shared";
 import { Card, EmptyState, KindTag, Pill, Section, links } from "../ui";
 import "./modeldetail.css";
 

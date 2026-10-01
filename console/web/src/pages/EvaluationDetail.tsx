@@ -11,7 +11,7 @@ import { DiscriminationTab } from "../components/EvaluationDetail/Discrimination
 import { FairnessTab } from "../components/EvaluationDetail/FairnessTab";
 import { FeaturesTab } from "../components/EvaluationDetail/FeaturesTab";
 import { StabilityTab } from "../components/EvaluationDetail/StabilityTab";
-import { DetailView, NotFoundState, checkName, definitionRefOf, isBaselineRef, modelOfRef } from "../components/Models/shared";
+import { DetailView, NotFoundState, checkName, definitionRefOf, isBaselineRef, modelOfRef } from "../components/shared";
 import { limitsFrom } from "../components/Performance/thresholds";
 import { DefinitionBadge, Page, PageHeader, Tabs, Tiles, links } from "../components/ui";
 import { fmtAuc, fmtDateTime, fmtDiff, fmtNum, fmtPct, refLabel } from "../lib/format";

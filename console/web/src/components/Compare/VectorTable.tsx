@@ -20,7 +20,7 @@ function status(c: Component): { text: string; tone: "accent" | "neutral" | "inf
 
 export function VectorTable({ components, defs, label }: { components: Component[]; defs: DefinitionVersion[]; label: string }) {
   return (
-    <div className="table-wrap">
+    <div className="table-wrap" tabIndex={0} role="region" aria-label="Table (scrolls sideways when narrow)">
       <table className="data compare-vector">
         <caption className="sr-only">{label}</caption>
         <thead>

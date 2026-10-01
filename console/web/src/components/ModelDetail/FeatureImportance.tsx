@@ -1,7 +1,7 @@
 /** Feature importance as bars drawn to scale plus an exact table. Used by the model and evaluation detail screens. */
 import { Link } from "react-router-dom";
 import { fmtPct } from "../../lib/format";
-import { HBars } from "../Models/shared";
+import { HBars } from "../shared";
 import { Card, DataTable, EmptyState, links, type Column } from "../ui";
 
 interface Row {

@@ -103,7 +103,7 @@ export function PermissionMatrix({ agents }: { agents: AgentInfo[] }) {
   if (!tools.length) return <EmptyState title="No tool lists available">The tool lists come from the agent definitions in the code.</EmptyState>;
   return (
     <Card flush>
-      <div className="table-wrap" style={{ border: 0, borderRadius: 0 }}>
+      <div className="table-wrap" tabIndex={0} role="region" aria-label="Table (scrolls sideways when narrow)" style={{ border: 0, borderRadius: 0 }}>
         {/* position: relative makes the table the containing block of the absolutely positioned sr-only text, so the scroll container clips it */}
         <table className="data" style={{ position: "relative" }}>
           <caption className="sr-only">Which tools each agent may call. A check mark means the agent may call the tool.</caption>

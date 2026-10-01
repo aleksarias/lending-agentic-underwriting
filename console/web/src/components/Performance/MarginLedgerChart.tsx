@@ -6,7 +6,7 @@
 import type { PerformanceData } from "../../api/types";
 import { fmtDiff, refLabel } from "../../lib/format";
 import { niceTicks } from "../EvaluationDetail/stats";
-import { useElementWidth } from "../Models/shared";
+import { useElementWidth } from "../shared";
 import { useChartColors } from "../charts";
 import "./performance.css";
 

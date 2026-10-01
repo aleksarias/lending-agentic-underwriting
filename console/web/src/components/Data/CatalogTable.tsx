@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import type { CatalogVariable } from "../../api/types";
 import { fmtAuc, fmtPct, titleCase } from "../../lib/format";
 import { classLabel } from "../Fairness/labels";
-import { StopRowClick, WrapHeader } from "../Models/shared";
+import { StopRowClick, WrapHeader } from "../shared";
 import type { Limits } from "../Performance/thresholds";
 import { DataTable, Pill, type Column } from "../ui";
 import { variableHref } from "./Watchlists";

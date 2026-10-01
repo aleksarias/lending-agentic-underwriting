@@ -12,7 +12,7 @@ import { ComplianceFindings, ProhibitedRegister } from "../components/Fairness/F
 import { ProxyHeatmap } from "../components/Fairness/ProxyHeatmap";
 import { classLabel, comparison } from "../components/Fairness/labels";
 import "../components/Fairness/fairness.css";
-import { DefinitionSelect, HBars, definitionRefOf, isBaselineRef, modelOfRef, pickDefinition, plural, useDefinitionParam } from "../components/Models/shared";
+import { DefinitionSelect, HBars, definitionRefOf, isBaselineRef, modelOfRef, pickDefinition, plural, useDefinitionParam } from "../components/shared";
 import { Banner, Card, EmptyState, Page, PageHeader, QueryView, Section, UnavailableState } from "../components/ui";
 import { fmtAuc, fmtNum, refLabel } from "../lib/format";
 

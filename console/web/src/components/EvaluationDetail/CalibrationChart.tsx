@@ -4,7 +4,7 @@
  */
 import { fmtPct } from "../../lib/format";
 import { useChartColors } from "../charts";
-import { useElementWidth } from "../Models/shared";
+import { useElementWidth } from "../shared";
 import { niceTicks, wilson } from "./stats";
 
 export interface CalibrationBin {

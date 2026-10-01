@@ -6,7 +6,7 @@ import { Link } from "react-router-dom";
 import type { EvaluationDetail, Tile } from "../../api/types";
 import { fmtAuc, fmtPct } from "../../lib/format";
 import { classLabel, comparison, groupLabel } from "../Fairness/labels";
-import { HBars, type HBarRow } from "../Models/shared";
+import { HBars, type HBarRow } from "../shared";
 import type { Limits } from "../Performance/thresholds";
 import { Card, Section, Tiles, links } from "../ui";
 import "./evaluation.css";

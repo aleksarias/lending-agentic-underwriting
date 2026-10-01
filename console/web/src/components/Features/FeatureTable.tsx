@@ -91,7 +91,7 @@ function Detail({ f, activeVersion }: { f: FeatureRow; activeVersion: string }) 
           {versions.length === 0 ? (
             <div className="small muted">Not screened yet. The pipeline screens every registered feature when a definition is applied.</div>
           ) : (
-            <div className="table-wrap" style={{ border: 0 }}>
+            <div className="table-wrap" tabIndex={0} role="region" aria-label="Table (scrolls sideways when narrow)" style={{ border: 0 }}>
               <table className="data">
                 <thead>
                   <tr>
@@ -222,7 +222,7 @@ export function FeatureTable({ rows, activeVersion, initiallyOpen }: { rows: Fea
 
   if (!rows.length) return <EmptyState title="No features match these filters">Clear a filter to see the rest.</EmptyState>;
   return (
-    <div className="table-wrap features-wrap">
+    <div className="table-wrap features-wrap" tabIndex={0} role="region" aria-label="Table (scrolls sideways when narrow)">
       <table className="data">
         <thead>
           <tr>

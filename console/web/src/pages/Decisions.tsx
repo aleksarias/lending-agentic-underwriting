@@ -266,7 +266,16 @@ function LiveSections({ d }: { d: DecisionsData }) {
 function decisionColumns(): Column<DecisionRow>[] {
   return [
     { key: "when", header: "Decided", render: (r) => <span className="nowrap" title={fmtDateTime(r.decided_at)}><TimeAgo iso={r.decided_at} /></span>, sort: (r) => r.decided_at },
-    { key: "app", header: "Application", render: (r) => <span className="mono xs">{r.application_id}</span>, sort: (r) => r.application_id },
+    {
+      key: "app",
+      header: "Application",
+      render: (r) => (
+        <Link className="mono xs" to={`/decisions/${encodeURIComponent(r.decision_id)}`} aria-label={`Decision for application ${r.application_id}`}>
+          {r.application_id}
+        </Link>
+      ),
+      sort: (r) => r.application_id,
+    },
     { key: "decision", header: "Decision", render: (r) => <OutcomePill outcome={r.decision} />, sort: (r) => r.decision },
     { key: "pd", header: "PD", render: (r) => (r.probability_of_default != null ? fmtPct(r.probability_of_default, 1) : "—"), sort: (r) => r.probability_of_default, align: "right" },
     { key: "band", header: "Band", render: (r) => r.risk_band ?? "—", sort: (r) => r.risk_band },
