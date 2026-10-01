@@ -43,6 +43,10 @@ def _num(v, digits: int = 0) -> str:
     return "—" if v is None or pd.isna(v) else f"{float(v):,.{digits}f}"
 
 
+def _s(v, default: str = "—") -> str:
+    return default if v is None or (isinstance(v, float) and pd.isna(v)) or str(v) in ("", "nan", "None") else str(v)
+
+
 def _table(df: pd.DataFrame, cols: dict[str, str]) -> str:
     if df.empty:
         return "_none_"
@@ -107,7 +111,7 @@ def monthly(month: str | None = None, log=print) -> str:
         out += [
             f"**{r['title']}.** {r['detail'] or ''}{lift}",
             "",
-            f"Best known model: {r['best_known_label'] or '—'}; serving: {r['serving_key'] or 'legacy policy'}.",
+            f"Best known model: {_s(r['best_known_label'])}; serving: {_s(r['serving_key'], 'the legacy policy')}.",
             "",
         ]
 
