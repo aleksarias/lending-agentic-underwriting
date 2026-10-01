@@ -1196,3 +1196,19 @@ export interface DefinitionProposal {
   rebuilds: { stage: string; description: string }[];
   known_before: boolean;
 }
+
+// ------------------------------------------------------------------------------------------------------- readiness
+export interface ReadinessItem {
+  id: string;
+  title: string;
+  detail: string;
+  state: "signed" | "open" | "declined";
+  evidence: { label: string; met: boolean; detail: string }[];
+  signoffs: { role: string; decision: "sign" | "decline" | "revoke" | null; signer: string | null; ts: ISODate | null; note: string | null }[];
+}
+
+export interface ReadinessData {
+  items: ReadinessItem[];
+  ready: boolean;
+  statement: string;
+}

@@ -135,5 +135,6 @@ export const useFeatureDecision = () =>
 export const usePinHypothesis = () => useAction((v: { text: string }) => apiPost<T.ActionResult>("/hypotheses", v), [["hypotheses"]]);
 export const useUnpinHypothesis = () =>
   useAction((v: { hypothesis_id: string }) => apiPost<T.ActionResult>(`/hypotheses/${seg(v.hypothesis_id)}/unpin`), [["hypotheses"]]);
+export const useReadiness = () => useQ<T.ReadinessData>(["readiness"], "/readiness");
 export const useAsk = () =>
   useMutation<T.AskResponse, Error, { question: string }>({ mutationFn: (v) => apiPost<T.AskResponse>("/ask", v) });

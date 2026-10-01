@@ -12,6 +12,14 @@ import pandas as pd
 Kind = str  # "ts" | "str" | "float" | "int" | "bool"
 
 TABLES: dict[str, list[tuple[str, Kind]]] = {
+    "readiness_evidence": [
+        ("computed_at", "ts"),
+        ("run_id", "str"),
+        ("item_id", "str"),
+        ("label", "str"),
+        ("met", "bool"),
+        ("detail", "str"),
+    ],
     "policy_tradeoff": [
         ("computed_at", "ts"),
         ("run_id", "str"),

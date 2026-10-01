@@ -19,6 +19,7 @@ const ROUTES = [
   "/agents/lessons",
   "/approvals",
   "/rollouts",
+  "/readiness",
   "/shadow",
   "/alerts",
   "/cost",

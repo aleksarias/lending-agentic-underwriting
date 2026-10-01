@@ -2,7 +2,7 @@
 
     model_registry -> evaluation_metrics -> benchmark_results -> definition_sensitivity -> vintage_curves
     -> cashflow_cohorts -> proxy_scan -> production_evidence -> decision_fairness -> serving_parity
-    -> policy_tradeoff -> improvement_ledger
+    -> policy_tradeoff -> readiness_evidence -> improvement_ledger
 The three production steps read the decision log and the loan status feed; before either exists they are skipped.
 
 Per-run tables are appended with one shared run_id and computed_at; `model_registry` and `evaluation_metrics` are
@@ -18,6 +18,7 @@ from collections.abc import Callable, Iterable
 
 import pandas as pd
 
+from lau import readiness
 from lau.decision import tradeoff
 from lau.evidence import benchmark, cohorts, metrics_flat, outcomes, proxies, registry_sync, schemas, verdict
 from lau.evidence.config import BenchmarkConfig
@@ -37,6 +38,7 @@ STEPS: dict[str, Callable[[EvidenceContext], pd.DataFrame]] = {
     "decision_fairness": decision_fairness.compute,
     "serving_parity": parity.compute,
     "policy_tradeoff": tradeoff.compute,
+    "readiness_evidence": readiness.compute,
     "improvement_ledger": verdict.compute,
 }
 ALIASES = {
@@ -55,6 +57,7 @@ ALIASES = {
     "parity": "serving_parity",
     "tradeoff": "policy_tradeoff",
     "what-if": "policy_tradeoff",
+    "readiness": "readiness_evidence",
 }
 
 

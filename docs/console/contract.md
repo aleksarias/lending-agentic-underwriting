@@ -94,6 +94,11 @@ unknown ones, 403 for actions while disabled, all as `{"detail": "..."}`. Respon
 | POST `/rollouts/{rollout_id}/serve` | `ActionResult` | lau.decision.rollout.serve: serving alias (promoter), decision model rebuild, endpoint update when it exists | actions only; needs the shadow minimum and the approvals, no rejection |
 | POST `/rollouts/{rollout_id}/rollback` `{reason}` | `ActionResult` | lau.decision.rollout.rollback | actions only; one person; restores the previous serving model or the legacy policy |
 | `/shadow` | `ShadowData` | ops.shadow_scores | available=false with reason if never run |
+| `/readiness` | `ReadinessData` (items with evidence, sign-offs per role, state signed/open/declined; `ready`, `statement`) | config/readiness.yaml, ops.readiness_evidence (latest run), ops.signoffs | read-only: sign-offs are recorded at a terminal (`lau readiness sign`) |
+| `/definitions/proposal` | `{proposal: DefinitionProposal \| null}` | config/default_definition.yaml, ops.definition_versions, ops.definition_approvals, pipeline stage catalog | null when the YAML is the active definition |
+| POST `/definitions/{version}/approve` `{note}` | `ActionResult` | lau.definition.registry.record_approval (ops.definition_approvals) | actions only; only the YAML's exact hash; one approval per person |
+| POST `/features/{name}/decision` `{decision: reject\|restore, reason}` | `ActionResult` | ops.feature_decisions | actions only; the harness fails candidates using a rejected feature |
+| `/hypotheses`; POST `/hypotheses` `{text}`; POST `/hypotheses/{id}/unpin` | `PinnedHypothesis[]` / `ActionResult` | ops.pinned_hypotheses | pinned ones go to the planner every cycle |
 | `/alerts` | `AlertsData` | ops.alerts, ops.alert_acks, ops.monitoring_runs | each alert carries a plain `title`, `current` (raised by the latest monitoring run) and `ack_at`/`ack_note`; open = current and not acknowledged (the status bar count) |
 | POST `/alerts/{alert_id}/ack` `{note}` | `ActionResult` | writes ops.alert_acks (harness store) | actions only |
 | `/cost` | `CostData` (with `billing` actuals from system.billing in mirror mode) | ops.cost_log, agent_trace (cost by agent), config project/budgets | billing_available=false unless system.billing readable; `by_agent` leaves out a running cycle (its cost is logged when it ends) so it matches the cost log |

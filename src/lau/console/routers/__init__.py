@@ -20,4 +20,5 @@ ROUTER_MODULES = [
     "cost",
     "settings",
     "search",
+    "readiness",
 ]

@@ -1,0 +1,35 @@
+# What must be true, and who must sign, before the decision API decides on real applications. The system gathers
+# evidence for each item (lau readiness status); named people sign at a terminal (lau readiness sign). The system never
+# declares itself compliant: an item is done only when its sign-offs are recorded.
+items:
+  - id: real_data
+    title: Real data
+    detail: Data agreements; a production workspace (the bundle's prod host is a placeholder); separate identities;
+      real-data masking on; retention set with counsel (Regulation B keeps application records at least 25 months
+      after notice).
+    signers: [data_owner, counsel]
+  - id: parallel_run
+    title: Parallel run
+    detail: The champion scores live traffic beside what decides (shadow) and a person reviews the comparison before it
+      decides anything.
+    signers: [credit_policy]
+  - id: model_validation
+    title: Independent model validation
+    detail: An independent validator reviews the champion, the credit policy and the benchmark method (model
+      documentation, release checks, production evidence).
+    signers: [model_validation]
+  - id: compliance
+    title: Compliance sign-off
+    detail: Reason statements, adverse-action notice text and timing, fair-lending monitoring on actual decisions and
+      the group-estimation method.
+    signers: [compliance, counsel]
+  - id: security_operations
+    title: Security and operations
+    detail: Security review; load test at peak plus margin; failure drills (endpoint down, feed late, bad model
+      promoted); runbook (docs/runbook.md) and an on-call rota.
+    signers: [security, operations]
+  - id: reject_inference
+    title: Reject inference
+    detail: The controlled approval experiment (docs/reject-inference.md) runs only with credit policy, compliance and
+      a loss budget signed off.
+    signers: [credit_policy, compliance, finance]

@@ -556,6 +556,67 @@ def features_unpin(
     _action_done(_guard(actions.hypothesis_unpin, hypothesis_id, by or getpass.getuser()), as_json)
 
 
+readiness_app = typer.Typer(no_args_is_help=True, help="Production readiness: checklist, evidence, sign-offs.")
+app.add_typer(readiness_app, name="readiness")
+
+
+@readiness_app.command("status")
+def readiness_status() -> None:
+    """The checklist with the evidence the system gathered and the sign-offs recorded."""
+    from lau.readiness import status
+
+    s = _guard(status)
+    for item in s["items"]:
+        _log(f"[{item['state'].upper():8}] {item['id']}: {item['title']}")
+        for e in item["evidence"]:
+            _log(f"    {'ok ' if e['met'] else '-- '} {e['label']} ({e['detail']})")
+        for r in item["signoffs"]:
+            _log(f"    {r['role']}: {r['decision'] or 'not signed'}" + (f" by {r['signer']}" if r["signer"] else ""))
+    _log(s["statement"])
+
+
+def _readiness_record(item_id: str, role: str, decision: str, note: str | None) -> None:
+    import getpass
+
+    from lau.readiness import record
+
+    if not sys.stdin.isatty():
+        _fail("a sign-off needs a person at an interactive terminal")
+    who = getpass.getuser()
+    if not typer.confirm(f"Record '{decision}' on {item_id} as {role} ({who})?"):
+        _fail("nothing recorded")
+    why = note or typer.prompt("What you reviewed (at least 20 characters)")
+    try:
+        row = record(item_id, role, who, decision, why)
+    except ValueError as e:
+        _fail(str(e))
+    _log(f"recorded {row['signoff_id']}: {decision} on {item_id} by {who} as {role}")
+
+
+@readiness_app.command("sign")
+def readiness_sign(
+    item_id: str, role: str = typer.Option(..., "--role"), note: str = typer.Option(None, "--note")
+) -> None:
+    """Sign a checklist item for your role (interactive)."""
+    _readiness_record(item_id, role, "sign", note)
+
+
+@readiness_app.command("decline")
+def readiness_decline(
+    item_id: str, role: str = typer.Option(..., "--role"), note: str = typer.Option(None, "--note")
+) -> None:
+    """Decline a checklist item for your role, with the reason (interactive)."""
+    _readiness_record(item_id, role, "decline", note)
+
+
+@readiness_app.command("revoke")
+def readiness_revoke(
+    item_id: str, role: str = typer.Option(..., "--role"), note: str = typer.Option(None, "--note")
+) -> None:
+    """Withdraw an earlier sign-off for your role (interactive)."""
+    _readiness_record(item_id, role, "revoke", note)
+
+
 report_app = typer.Typer(no_args_is_help=True, help="Dated reports from the evidence (monthly | model).")
 app.add_typer(report_app, name="report")
 

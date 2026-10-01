@@ -142,7 +142,14 @@ def run(cfg: Path) -> None:
 
     run_all(
         log=print,
-        only=["model_registry", "production_evidence", "decision_fairness", "serving_parity", "policy_tradeoff"],
+        only=[
+            "model_registry",
+            "production_evidence",
+            "decision_fairness",
+            "serving_parity",
+            "policy_tradeoff",
+            "readiness_evidence",
+        ],
     )  # the console reads the serving alias from the registry mirror, and the production evidence
     from lau.governance import human_input
     from lau.reports import model_pack, monthly

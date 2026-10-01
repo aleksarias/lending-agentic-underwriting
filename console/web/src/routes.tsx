@@ -47,6 +47,7 @@ const P = {
   Approvals: lazy(() => import("./pages/Approvals")),
   ApprovalDetail: lazy(() => import("./pages/ApprovalDetail")),
   Rollouts: lazy(() => import("./pages/Rollouts")),
+  Readiness: lazy(() => import("./pages/Readiness")),
   Shadow: lazy(() => import("./pages/Shadow")),
   Alerts: lazy(() => import("./pages/Alerts")),
   Cost: lazy(() => import("./pages/Cost")),
@@ -81,6 +82,7 @@ export const ROUTES: RouteDef[] = [
   { path: "/approvals", component: P.Approvals },
   { path: "/approvals/:candidateRef", component: P.ApprovalDetail },
   { path: "/rollouts", component: P.Rollouts },
+  { path: "/readiness", component: P.Readiness },
   { path: "/shadow", component: P.Shadow },
   { path: "/alerts", component: P.Alerts },
   { path: "/cost", component: P.Cost },
@@ -114,6 +116,7 @@ export const NAV: NavGroup[] = [
   { label: "Decide and operate", items: [
     { path: "/approvals", label: "Approvals", countKey: "decisions_waiting" },
     { path: "/rollouts", label: "Rollouts" },
+    { path: "/readiness", label: "Readiness" },
     { path: "/shadow", label: "Shadow scoring" },
     { path: "/alerts", label: "Alerts", countKey: "alerts_open" },
     { path: "/cost", label: "Cost" },

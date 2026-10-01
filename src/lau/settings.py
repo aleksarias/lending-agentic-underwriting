@@ -110,6 +110,7 @@ class Settings:
         self.masking = _load_yaml("masking.yaml")
         self.decisioning = _load_yaml("decisioning.yaml")
         self.feedback = _load_yaml("feedback.yaml")
+        self.readiness = _load_yaml("readiness.yaml")
         self.state = load_state()
 
     # ---- naming -------------------------------------------------------------------------------------

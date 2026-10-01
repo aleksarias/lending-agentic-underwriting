@@ -321,6 +321,10 @@ make teardown                             # remove everything the project create
 | `lau decision check parity\|load\|rollback` | release checks: training-serving parity, latency against targets, rollback drill (ops.release_checks) |
 | `lau decision explain <decision_id>` / `reconcile` | adverse-action content for one decision / log decisions from the endpoint's inference table |
 | `lau rollout list` / `report` / `decide` / `serve` / `rollback` | shadow-first rollouts of promoted champions |
+| `lau report monthly [--month]` / `model <version>` | the monthly improvement report and a model documentation draft from the evidence (experiments.reports; no LLM) |
+| `lau features decide <name> --decision reject\|restore` / `pin <text>` / `unpin <id>` | people's input: a rejected feature fails validation in the harness; pinned hypotheses go to the planner |
+| `lau default-definition approve <hash> --note` | approve the YAML definition's exact hash (the console uses this; the daily job applies it) |
+| `lau readiness status` / `sign` / `decline` / `revoke` | the production-readiness checklist: evidence the system gathered, sign-offs by named roles at a terminal ([docs/runbook.md](docs/runbook.md)) |
 | `lau feed run` / `status` / `release <file>` | the loan status feed: simulated servicer, ingestion with expectations and quarantine, maturation; release a held file after review ([docs/feedback.md](docs/feedback.md)) |
 | `lau teardown` | remove all project resources (restores an adopted warehouse) |
 
