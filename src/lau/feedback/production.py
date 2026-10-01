@@ -48,8 +48,10 @@ class NoProductionDataError(RuntimeError):
 def book(store=None) -> tuple[pd.DataFrame, pd.DataFrame, str]:
     """(loans, performance in raw.performance shape, as-of month) for the production loan book."""
     st = store or get_store("harness")
-    if not (st.table_exists("curated", "loan_bookings") and st.table_exists("curated", "loan_performance_current")):
+    if not st.table_exists("curated", "loan_bookings"):
         raise NoProductionDataError("no loan status feed has been ingested yet")
+    if not st.table_exists("curated", "loan_performance_current"):
+        raise NoProductionDataError("loans are booked, but none has reported a month of performance yet")
     loans = st.query(
         "SELECT b.loan_id, b.application_id, b.decision_id, b.booked_month AS origination_month, "
         f"d.decided_at AS decision_ts FROM {st.fq('curated', 'loan_bookings')} b "

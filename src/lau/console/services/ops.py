@@ -632,28 +632,61 @@ def alerts() -> list[dict]:
         last = files.sort_values("ingested_at").drop_duplicates("feed_file", keep="last")
         latest["held_files"] = set(last.loc[last["status"] == "held", "feed_file"].astype(str))
     ack = acks()
+    rows = df.sort_values("ts").to_dict("records")
+    acked: dict[tuple, list[tuple]] = {}  # (kind, subject, definition) -> [(ts, value, ack)] of acknowledged alerts
+    for r in rows:
+        aid = alert_id(r["ts"], str(r["kind"]), str(r["subject"]))
+        if aid in ack:
+            key = (str(r["kind"]), str(r["subject"]), str(r.get("definition_version") or ""))
+            acked.setdefault(key, []).append((pd.Timestamp(r["ts"]), num(r.get("value")) or 0.0, ack[aid]))
     out = []
-    for r in df.sort_values("ts", ascending=False).to_dict("records"):
+    for r in reversed(rows):
         aid = alert_id(r["ts"], str(r["kind"]), str(r["subject"]))
         sev = str(r.get("severity") or "low")
+        value = num(r.get("value")) or 0.0
+        found, carried = ack.get(aid), False
+        if found is None:
+            found = _carried_ack(r, value, acked)
+            carried = found is not None
         out.append(
             {
                 "id": aid,
                 "ts": iso(r["ts"]),
                 "kind": str(r["kind"]),
                 "subject": str(r["subject"]),
-                "value": num(r.get("value")) or 0.0,
+                "value": value,
                 "severity": sev if sev in ("high", "medium", "low") else "low",
                 "definition_version": str(r.get("definition_version") or ""),
-                "acknowledged": aid in ack,
-                "ack_by": (ack.get(aid) or {}).get("by"),
-                "ack_at": (ack.get(aid) or {}).get("at"),
-                "ack_note": (ack.get(aid) or {}).get("note"),
-                "title": alert_title(str(r["kind"]), str(r["subject"]), num(r.get("value")) or 0.0),
+                "acknowledged": found is not None,
+                "ack_by": (found or {}).get("by"),
+                "ack_at": (found or {}).get("at"),
+                "ack_note": (found or {}).get("note"),
+                "ack_carried": carried,
+                "title": alert_title(str(r["kind"]), str(r["subject"]), value),
                 "current": _is_current(r, latest),
             }
         )
     return out
+
+
+ACK_CARRY_DAYS = 30  # a carried acknowledgement expires: a persistent condition is looked at again every month
+
+
+def _carried_ack(r: dict, value: float, acked: dict) -> dict | None:
+    """Monitoring re-raises a persistent condition every run. A person's acknowledgement of the same kind of alert on
+    the same subject and definition carries over for ACK_CARRY_DAYS, unless the value got materially worse since."""
+    if str(r["kind"]) == "feed_held":
+        return None  # every held file is its own problem
+    ts = pd.Timestamp(r["ts"])
+    for at, acked_value, a in reversed(
+        acked.get((str(r["kind"]), str(r["subject"]), str(r.get("definition_version") or "")), [])
+    ):
+        if at >= ts or (ts - at).days > ACK_CARRY_DAYS:
+            continue
+        worse = value - acked_value > 0.05 if str(r["kind"]) == "psi" else abs(value) - abs(acked_value) > 0.10
+        if not worse:
+            return a
+    return None
 
 
 ALERT_SOURCES = {"production_default_rate": "production", "feed_held": "feed"}  # every other kind: monitoring

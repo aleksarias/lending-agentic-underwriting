@@ -941,3 +941,54 @@ def test_switching_roles_never_reuses_another_roles_mlflow_client(monkeypatch):
         with credentials.role_env(role):
             assert rest.get_workspace_client(False, "https://example", None, None) == roles[role]
     assert made == ["cid-harness", "cid-promoter", "cid-harness"]
+
+
+def test_an_acknowledgement_carries_to_repeats_of_the_same_alert_until_it_worsens_or_expires(lake):
+    """Monitoring re-raises a persistent condition every run: a person's acknowledgement covers the repeats for 30 days
+    unless the value got materially worse, so the daily notify task does not page for a known condition."""
+    from datetime import timedelta
+
+    from lau.console.services import ops
+    from lau.console.util import clear_cache
+    from lau.store import get_store
+
+    st = get_store("harness")
+    t0 = datetime(2026, 9, 1, 6, 0, tzinfo=UTC)
+    rows = [
+        (t0, 0.31),  # acknowledged by a person
+        (t0 + timedelta(days=1), 0.315),  # the same condition again: carried
+        (t0 + timedelta(days=2), 0.40),  # materially worse (+0.09 PSI): needs a person
+        (t0 + timedelta(days=40), 0.31),  # same value, but the acknowledgement expired
+    ]
+    alerts = pd.DataFrame(
+        [
+            {
+                "kind": "psi",
+                "subject": "unit_carry_feature",
+                "value": v,
+                "severity": "high",
+                "ts": ts,
+                "definition_version": "vcarry",
+            }
+            for ts, v in rows
+        ]
+    )
+    st.write_df("ops", "alerts", alerts, mode="append")
+    first = ops.alert_id(pd.Timestamp(t0), "psi", "unit_carry_feature")
+    st.write_df(
+        "ops",
+        "alert_acks",
+        pd.DataFrame(
+            [{"alert_id": first, "acked_at": t0 + timedelta(hours=1), "acked_by": "alice", "note": "known drift"}]
+        ),
+        mode="append",
+    )
+    clear_cache()
+    mine = sorted((a for a in ops.alerts() if a["subject"] == "unit_carry_feature"), key=lambda a: a["ts"])
+    assert [(a["acknowledged"], a["ack_carried"]) for a in mine] == [
+        (True, False),
+        (True, True),
+        (False, False),
+        (False, False),
+    ]
+    assert mine[1]["ack_by"] == "alice"

@@ -29,7 +29,15 @@ export function AlertHistory({ alerts, th }: { alerts: AlertItem[]; th: Threshol
     {
       key: "status",
       header: "Acknowledged by",
-      render: (a) => (a.acknowledged ? <span>{a.ack_by ?? "someone (name not recorded)"}</span> : <span className="muted">nobody: a newer monitoring run has replaced it</span>),
+      render: (a) =>
+        a.acknowledged ? (
+          <span>
+            {a.ack_by ?? "someone (name not recorded)"}
+            {a.ack_carried && <span className="xs muted"> (carried from an earlier acknowledgement of the same condition)</span>}
+          </span>
+        ) : (
+          <span className="muted">nobody: a newer run has replaced it</span>
+        ),
       sort: (a) => (a.acknowledged ? 1 : 0),
     },
   ];
