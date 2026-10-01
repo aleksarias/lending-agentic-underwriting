@@ -63,6 +63,8 @@ resources:
         - task_key: notify   # fails while a high alert or a held feed file waits for a person: the failure email is the notification
           depends_on: [{task_key: console_snapshot}, {task_key: reports}]
           run_if: ALL_DONE
+          max_retries: 0                  # a retry finds the same open items
+          disable_auto_optimization: true # serverless would otherwise retry it automatically
           environment_key: lau
           python_wheel_task: {package_name: lending_agentic_underwriting, entry_point: lau-job, parameters: ["notify", "--root", "${workspace.file_path}"]}
       timeout_seconds: 5400

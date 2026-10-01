@@ -993,8 +993,10 @@ export interface AlertItem {
   ack_note: string | null;
   /** Plain-language headline, e.g. "Score distribution shifted (PSI 0.302)" */
   title: string;
-  /** Raised by the latest monitoring run (older alerts were re-evaluated since) */
+  /** Raised by the latest run of the check that raises it (older alerts were re-evaluated since) */
   current: boolean;
+  /** Acknowledged through an earlier acknowledgement of the same condition (30 days, unless it got worse) */
+  ack_carried?: boolean;
 }
 
 export interface AlertsData {
