@@ -16,6 +16,7 @@ from fastapi import HTTPException
 from lau.console import deps
 from lau.console.services import definitions as defs
 from lau.console.util import (
+    AS_OF_PARAM,
     DEF_PARAM,
     api_router,
     boolean,
@@ -94,11 +95,13 @@ def variable(variable: str, version: str | None = DEF_PARAM) -> dict:
 
 
 @router.get("/parity")
-def parity() -> dict:
-    """Training-serving parity of the inputs the decision API saw (ops.serving_parity)."""
+def parity(as_of: str | None = AS_OF_PARAM) -> dict:
+    """Training-serving parity of the inputs the decision API saw (ops.serving_parity), now or as of a date."""
     from lau.console.services import feedback
+    from lau.console.util import evidence_as_of
 
-    return feedback.serving_parity()
+    with evidence_as_of(as_of):
+        return feedback.serving_parity()
 
 
 @router.get("/cashflow/cohorts")

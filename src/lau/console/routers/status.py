@@ -64,11 +64,22 @@ def _status_core() -> dict:
         "decisions_waiting": len(approvals.waiting_items()),
         "alerts_open": ops.open_alerts(),
         "api": decisions.api_brief(),
-        "feed": {
-            "live": False,
-            "last_received_at": iso(latest_data["created_at"]) if latest_data else None,
-            "quality_failures": None,
-        },
+        "feed": _feed_chip(latest_data),
+    }
+
+
+def _feed_chip(latest_data: dict | None) -> dict:
+    """Live once the loan status feed has delivered a file; otherwise when the last batch data version loaded."""
+    from lau.console.services import feedback
+
+    live = feedback.feed_live()
+    if live and live["files"]:
+        newest = live["files"][0]
+        return {"live": True, "last_received_at": newest["ingested_at"], "quality_failures": newest["quarantined"]}
+    return {
+        "live": False,
+        "last_received_at": iso(latest_data["created_at"]) if latest_data else None,
+        "quality_failures": None,
     }
 
 

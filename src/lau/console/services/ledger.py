@@ -6,7 +6,7 @@ import pandas as pd
 
 from lau.console import deps
 from lau.console.services import models
-from lau.console.util import iso, loads, num, read_table, text, ttl_cache
+from lau.console.util import AS_OF, iso, loads, num, read_table, text, ttl_cache
 
 VERDICT_CODES = {"improved", "no_change", "not_best", "regressed", "insufficient_evidence"}
 
@@ -15,6 +15,9 @@ VERDICT_CODES = {"improved", "no_change", "not_best", "regressed", "insufficient
 def latest() -> dict | None:
     """The newest ledger row with JSON columns parsed, or None when the ledger has never been written."""
     df = read_table(deps.ui_store(), "ops", "improvement_ledger", ts=["computed_at"])
+    cutoff = AS_OF.get()
+    if len(df) and cutoff is not None:
+        df = df[df["computed_at"] <= cutoff.tz_localize("UTC")]
     if df.empty:
         return None
     r = df.sort_values("computed_at").iloc[-1].to_dict()

@@ -12,6 +12,22 @@ import pandas as pd
 Kind = str  # "ts" | "str" | "float" | "int" | "bool"
 
 TABLES: dict[str, list[tuple[str, Kind]]] = {
+    "policy_tradeoff": [
+        ("computed_at", "ts"),
+        ("run_id", "str"),
+        ("definition_version", "str"),
+        ("model_label", "str"),
+        ("window_start", "str"),
+        ("window_end", "str"),
+        ("n_applications", "int"),
+        ("cutoff", "float"),
+        ("approval_rate", "float"),
+        ("expected_bad_rate", "float"),
+        ("known_n", "int"),
+        ("known_bad_rate", "float"),
+        ("is_policy_approve", "bool"),
+        ("is_policy_refer", "bool"),
+    ],
     "production_evidence": [
         ("computed_at", "ts"),
         ("run_id", "str"),

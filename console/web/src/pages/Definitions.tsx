@@ -12,6 +12,7 @@ import type { DefinitionVersion } from "../api/types";
 import { ActiveBanner } from "../components/Definitions/ActiveBanner";
 import "../components/Definitions/Definitions.css";
 import { FieldChanges } from "../components/Definitions/FieldChanges";
+import { ProposalSection } from "../components/Definitions/ProposalSection";
 import { SensitivitySection } from "../components/Definitions/SensitivitySection";
 import { VersionHistory } from "../components/Definitions/VersionHistory";
 import { definitionLabel, definitionRefOf, neighbours } from "../components/Definitions/labels";
@@ -49,6 +50,7 @@ function DefinitionsBody({ defs }: { defs: DefinitionVersion[] }) {
       />
 
       <ActiveBanner active={active} hasAny={defs.length > 0} />
+      <ProposalSection />
 
       {defs.length > 0 && (
         <>

@@ -10,6 +10,7 @@ import type { FeatureRow } from "../../api/types";
 import { fmtAuc, fmtDateTime, fmtPct } from "../../lib/format";
 import { Card, CodeBlock, EmptyState, KindTag, Pill, links } from "../ui";
 import { DefBadge, ModelKeyBadge, roleLabel } from "../Agents/shared";
+import { FeatureDecision } from "./PeopleInput";
 
 type Perf = FeatureRow["performance"][string];
 
@@ -185,6 +186,7 @@ export function FeatureTable({ rows, activeVersion, initiallyOpen }: { rows: Fea
     { key: "missing", header: "Missing", align: "r", sort: (_f, p) => p?.missing_rate ?? null, render: (_f, p) => (p ? fmtPct(p.missing_rate, 1) : "—") },
     { key: "leak", header: "Leakage", sort: (_f, p) => ({ low: 0, medium: 1, high: 2 })[p?.leakage_risk as "low"] ?? null, render: (_f, p) => <LeakagePill risk={p?.leakage_risk} /> },
     { key: "proxy", header: "Proxy", sort: (_f, p) => (p?.proxy_risk === "high" ? 1 : p?.proxy_risk === "low" ? 0 : null), render: (_f, p) => <ProxyPill risk={p?.proxy_risk} /> },
+    { key: "person", header: "A person's decision", sort: (f) => (f.rejected ? 1 : 0), render: (f) => <FeatureDecision f={f} /> },
     {
       key: "used",
       header: "Used in",

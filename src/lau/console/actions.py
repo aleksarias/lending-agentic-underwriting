@@ -17,7 +17,20 @@ from datetime import UTC, datetime
 
 import pandas as pd
 
-ACTIONS = ("gate", "decide", "promote", "stop", "ack", "rollout_decide", "rollout_serve", "rollout_rollback")
+ACTIONS = (
+    "gate",
+    "decide",
+    "promote",
+    "stop",
+    "ack",
+    "rollout_decide",
+    "rollout_serve",
+    "rollout_rollback",
+    "definition_approve",
+    "feature_decision",
+    "hypothesis_pin",
+    "hypothesis_unpin",
+)
 
 
 def _ok(message: str, ref: str | None = None) -> dict:
@@ -182,6 +195,66 @@ def rollout_rollback(rollout_id: str, reason: str, by: str) -> dict:
     return _ok(f"Rolled back: {now} decides again.", rollout_id)
 
 
+def definition_approve(version: str, note: str, approver: str) -> dict:
+    """Approve the exact definition hash in config/default_definition.yaml (two-person rule: approvals.definition).
+
+    The daily job's definition sync applies it once enough different people approved; nothing rebuilds here.
+    """
+    from lau.console.services import config
+    from lau.definition import registry
+    from lau.governance.approvals import required
+    from lau.store import get_store
+
+    if version != config.yaml_definition_version():
+        return _no("Only the definition in config/default_definition.yaml can be approved, by its exact hash.", version)
+    if len((note or "").strip()) < 10:
+        return _no("a note of at least 10 characters is required (what you checked)", version)
+    st = get_store("harness")
+    if approver in registry.approvers(st, version):
+        return _no(f"{approver} already approved definition {version[:8]}.", version)
+    aid = registry.record_approval(st, version, note.strip(), approver)
+    have, need = len(registry.approvers(st, version)), required("definition")
+    if have < need:
+        return _ok(f"Approved by {approver}: {have} of {need}. Another person must approve this hash.", aid)
+    return _ok(
+        f"Approved ({have} of {need}). The daily job's definition sync applies it after the bundle is deployed "
+        "with this YAML (make deploy), or run `lau default-definition apply` now.",
+        aid,
+    )
+
+
+def feature_decision(name: str, decision: str, reason: str, by: str) -> dict:
+    from lau.governance import human_input
+
+    try:
+        human_input.feature_decision(name, decision, reason, by)
+    except ValueError as e:
+        return _no(str(e), name)
+    if decision == "reject":
+        return _ok(f"{name} is rejected: no candidate using it can pass validation, and the planner is told why.", name)
+    return _ok(f"{name} is restored: candidates may use it again.", name)
+
+
+def hypothesis_pin(text: str, by: str) -> dict:
+    from lau.governance import human_input
+
+    try:
+        h = human_input.pin(text, by)
+    except ValueError as e:
+        return _no(str(e))
+    return _ok("Pinned: the planner sees it at the start of every cycle until it is unpinned.", h["hypothesis_id"])
+
+
+def hypothesis_unpin(hypothesis_id: str, by: str) -> dict:
+    from lau.governance import human_input
+
+    try:
+        human_input.unpin(hypothesis_id, by)
+    except ValueError as e:
+        return _no(str(e), hypothesis_id)
+    return _ok("Unpinned.", hypothesis_id)
+
+
 # --------------------------------------------------------------------------------------------------- dispatch
 def _cli_args(name: str, kw: dict) -> list[str]:
     if name == "gate":
@@ -210,6 +283,32 @@ def _cli_args(name: str, kw: dict) -> list[str]:
             kw["rollout_id"],
             "--decision",
             kw["decision"],
+            "--note",
+            kw["note"],
+            "--approver",
+            kw["approver"],
+        ]
+    if name == "feature_decision":
+        return [
+            "features",
+            "decide",
+            kw["name"],
+            "--decision",
+            kw["decision"],
+            "--reason",
+            kw["reason"],
+            "--by",
+            kw["by"],
+        ]
+    if name == "hypothesis_pin":
+        return ["features", "pin", kw["text"], "--by", kw["by"]]
+    if name == "hypothesis_unpin":
+        return ["features", "unpin", kw["hypothesis_id"], "--by", kw["by"]]
+    if name == "definition_approve":
+        return [
+            "default-definition",
+            "approve",
+            kw["version"],
             "--note",
             kw["note"],
             "--approver",
@@ -267,5 +366,9 @@ def dispatch(name: str, **kw) -> dict:
         "rollout_decide": rollout_decide,
         "rollout_serve": rollout_serve,
         "rollout_rollback": rollout_rollback,
+        "definition_approve": definition_approve,
+        "feature_decision": feature_decision,
+        "hypothesis_pin": hypothesis_pin,
+        "hypothesis_unpin": hypothesis_unpin,
     }[name]
     return fn(**kw)

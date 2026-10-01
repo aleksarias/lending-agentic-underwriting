@@ -210,6 +210,9 @@ def evaluate_model(
     desc = dict(zip(cat["variable"], cat["description"], strict=False))
     codes = reason_codes.reason_codes(model, pop, sample, s.thresholds["reason_codes"]["top_n"], desc)
     prohibited_used = sorted(set(model.features) & prohibited_features())
+    from lau.governance.human_input import rejected_features
+
+    rejected_used = sorted(set(model.features) & set(rejected_features()))  # a person rejected these features
     rq = reason_codes.reason_quality(
         codes, int(sample.sum()), s.thresholds["reason_codes"]["top_n"], set(flagged_proxies) | prohibited_features()
     )
@@ -251,6 +254,7 @@ def evaluate_model(
         "score_psi": bool(score_psi <= th["max_score_psi"]),
         "no_leakage": not any(x["risk"] == "high" for x in leaks),
         "no_prohibited_features": not prohibited_used,
+        "no_rejected_features": not rejected_used,
         "no_proxy_features": not flagged_proxies,
         "adverse_impact": bool(fair["min_air"] >= fcfg["min_air"]),
         "reason_codes": bool(rq["coverage_any"] >= 0.99 and rq["flagged_feature_share"] == 0.0),
@@ -276,6 +280,7 @@ def evaluate_model(
         "proxies_flagged": flagged_proxies,
         "proxy_detail": {k: v for k, v in prox.items() if v["proxy_auc"] > 0.55},
         "prohibited_features_used": prohibited_used,
+        "rejected_features_used": rejected_used,
         "reason_code_quality": rq,
         "reason_code_sample": codes.head(40).to_dict("records"),
         "reference": reference,

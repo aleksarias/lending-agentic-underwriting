@@ -4,6 +4,7 @@ import { fmtAuc } from "../../lib/format";
 import { Banner, Card, EmptyState, PageHeader, Section, Tiles } from "../ui";
 import { DefBadge, FilterSelect, UrlSearch, useUrlFilters } from "../Agents/shared";
 import { FeatureTable } from "./FeatureTable";
+import { HypothesesSection } from "./PeopleInput";
 
 const KEYS = ["status", "risk", "q"] as const;
 
@@ -106,6 +107,7 @@ export function FeaturesView({ features, active, initialQuery }: { features: Fea
         <EmptyState title="No features have been proposed yet">
           The feature agent proposes engineered features as SQL expressions during an improvement cycle. Each one appears here with its screen results under the active definition.
         </EmptyState>
+        <HypothesesSection />
       </>
     );
   }
@@ -149,6 +151,7 @@ export function FeaturesView({ features, active, initialQuery }: { features: Fea
         </Card>
         <FeatureTable rows={rows} activeVersion={v} initiallyOpen={initialQuery && features.some((x) => x.name === initialQuery) ? [initialQuery] : []} />
       </Section>
+      <HypothesesSection />
     </>
   );
 }

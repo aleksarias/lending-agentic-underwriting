@@ -39,6 +39,7 @@ from lau.credentials import has_anthropic_key
 from lau.definition.hashing import definition_version
 from lau.definition.registry import active_version
 from lau.definition.schema import load_definition
+from lau.governance import human_input
 from lau.harness.evaluate import latest_evaluation
 from lau.settings import CONFIG_DIR, get_settings
 from lau.store import get_store
@@ -215,6 +216,9 @@ def _status(ctx: CycleContext) -> dict:
         "catalog": rt.catalog_summary(ctx.version, 15),
         "registered_features": rt._list_feats(ctx)["features"][:30],
         "lessons": lessons_mod.lessons_for_prompt(ctx.version),
+        # from people: never propose a rejected feature (the harness fails any candidate using one); try pinned ideas
+        "rejected_features": {k: v["reason"] for k, v in human_input.rejected_features(st).items()},
+        "pinned_hypotheses": [h["text"] for h in human_input.pinned(st)],
         "last_cycle": json.loads(last.to_json(orient="records"))[0] if len(last) else None,
     }
 

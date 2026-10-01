@@ -35,7 +35,15 @@ import { fmtAuc, fmtDate, fmtDiff, fmtInterval, fmtNum, fmtPct, fmtUsd, refLabel
 import { Link } from "react-router-dom";
 
 export default function Progress() {
-  const q = useProgress();
+  const [params, setParams] = useSearchParams();
+  const asOf = params.get("as_of");
+  const q = useProgress(asOf);
+  const setAsOf = (v: string) => {
+    const next = new URLSearchParams(params);
+    if (v) next.set("as_of", v);
+    else next.delete("as_of");
+    setParams(next, { replace: true });
+  };
   return (
     <Page>
       <QueryView query={q} loadingHeight={360}>
@@ -45,6 +53,17 @@ export default function Progress() {
               eyebrow="Over time"
               title="Is the system improving?"
               summary={summarySentence(p)}
+              actions={
+                <label className="row small" style={{ gap: 6 }}>
+                  <span className="muted">Evidence as of</span>
+                  <input type="date" value={asOf ?? ""} onChange={(e) => setAsOf(e.target.value)} aria-label="Show the evidence as computed at the end of this day" />
+                  {asOf && (
+                    <button type="button" className="btn small" onClick={() => setAsOf("")}>
+                      Now
+                    </button>
+                  )}
+                </label>
+              }
               meta={
                 p.verdict?.computed_at ? (
                   <span>
@@ -53,7 +72,12 @@ export default function Progress() {
                 ) : undefined
               }
             />
-            {p.verdict?.stale_reason && (
+            {p.as_of && (
+              <Banner tone="neutral" title={`Time travel: the evidence as it stood at the end of ${asOf}`}>
+                Every number below comes from the newest evidence run computed by then; later runs are ignored. Choose Now to return to the latest evidence.
+              </Banner>
+            )}
+            {!p.as_of && p.verdict?.stale_reason && (
               <Banner tone="warn" title="This evidence may be out of date">
                 {p.verdict.stale_reason}
               </Banner>

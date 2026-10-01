@@ -18,6 +18,7 @@ import shutil
 import sys
 from pathlib import Path
 
+import pandas as pd
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -141,8 +142,14 @@ def run(cfg: Path) -> None:
 
     run_all(
         log=print,
-        only=["model_registry", "production_evidence", "decision_fairness", "serving_parity"],
+        only=["model_registry", "production_evidence", "decision_fairness", "serving_parity", "policy_tradeoff"],
     )  # the console reads the serving alias from the registry mirror, and the production evidence
+    from lau.governance import human_input
+    from lau.reports import model_pack, monthly
+
+    human_input.pin("income volatility may matter more for thin files", "demo-reviewer")
+    monthly(pd.Timestamp.now(tz="UTC").strftime("%Y-%m"), log=print)
+    model_pack(versions["a"], log=print)
 
 
 if __name__ == "__main__":

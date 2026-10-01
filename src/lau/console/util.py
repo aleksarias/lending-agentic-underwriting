@@ -6,6 +6,8 @@ ever see what the ui grants allow (metadata and aggregates; never raw applicant 
 
 from __future__ import annotations
 
+import contextlib
+import contextvars
 import json
 import math
 import re
@@ -26,14 +28,49 @@ from lau.store import Store
 _CACHE: dict[tuple, tuple[float, Any]] = {}
 _CACHE_LOCK = threading.Lock()
 
+# Time travel: evidence views computed as of a past instant. Set for one request with `evidence_as_of`; every
+# latest-run lookup honours it, and cached results are keyed by it so views at different dates never mix.
+AS_OF: contextvars.ContextVar[pd.Timestamp | None] = contextvars.ContextVar("lau_console_as_of", default=None)
+AS_OF_PARAM = Query(None, alias="as_of", description="show evidence as computed at this date (YYYY-MM-DD) or instant")
+
+
+def parse_as_of(value: str | None) -> pd.Timestamp | None:
+    """'2026-09-30' means the end of that day (UTC); an ISO instant is used as given."""
+    if not value:
+        return None
+    try:
+        ts = pd.Timestamp(value)
+    except (ValueError, TypeError):
+        return None
+    if ts.tzinfo is not None:
+        ts = ts.tz_convert("UTC").tz_localize(None)
+    if len(value) == 10:
+        ts = ts + pd.Timedelta(days=1) - pd.Timedelta(microseconds=1)
+    return ts
+
+
+@contextlib.contextmanager
+def evidence_as_of(value: str | None):
+    token = AS_OF.set(parse_as_of(value))
+    try:
+        yield AS_OF.get()
+    finally:
+        AS_OF.reset(token)
+
+
+def as_of_sql(column: str = "computed_at") -> str:
+    """A WHERE fragment limiting evidence rows to the time-travel instant ('' without one)."""
+    ts = AS_OF.get()
+    return "" if ts is None else f" WHERE {column} <= TIMESTAMP '{ts.isoformat(sep=' ')}'"
+
 
 def ttl_cache(seconds: float = 30.0) -> Callable:
-    """Cache a function's result for `seconds`, keyed by its arguments (arguments must be hashable)."""
+    """Cache a function's result for `seconds`, keyed by its arguments (hashable) and the time-travel instant."""
 
     def deco(fn: Callable) -> Callable:
         @wraps(fn)
         def wrapper(*args, **kwargs):
-            key = (fn.__module__, fn.__qualname__, args, tuple(sorted(kwargs.items())))
+            key = (fn.__module__, fn.__qualname__, args, tuple(sorted(kwargs.items())), AS_OF.get())
             now = time.monotonic()
             with _CACHE_LOCK:
                 hit = _CACHE.get(key)

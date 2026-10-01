@@ -249,11 +249,46 @@ def available() -> bool:
     return table_exists(deps.ui_store(), "ops", "decisions")
 
 
+@ttl_cache(30)
+def tradeoff() -> dict | None:
+    """The latest what-if curve (ops.policy_tradeoff): approval and bad rates by PD cut-off on the validation window."""
+    st = deps.ui_store()
+    if not table_exists(st, "ops", "policy_tradeoff"):
+        return None
+    t = st.fq("ops", "policy_tradeoff")
+    df = query(
+        st,
+        f"SELECT * FROM {t} WHERE run_id = (SELECT run_id FROM {t} ORDER BY computed_at DESC LIMIT 1)",
+        ts=["computed_at"],
+    )
+    if df.empty:
+        return None
+    r0 = df.iloc[0]
+    return {
+        "computed_at": iso(df["computed_at"].max()),
+        "model_label": text(r0.get("model_label")),
+        "window": f"{r0['window_start']} to {r0['window_end']}",
+        "n_applications": integer(r0.get("n_applications")),
+        "points": [
+            {
+                "cutoff": float(r["cutoff"]),
+                "approval_rate": num(r.get("approval_rate")),
+                "expected_bad_rate": num(r.get("expected_bad_rate")),
+                "known_n": integer(r.get("known_n")) or 0,
+                "known_bad_rate": num(r.get("known_bad_rate")),
+                "is_policy_approve": bool(boolean(r.get("is_policy_approve"))),
+                "is_policy_refer": bool(boolean(r.get("is_policy_refer"))),
+            }
+            for r in df.sort_values("cutoff").to_dict("records")
+        ],
+    }
+
+
 def overview() -> dict:
     st = deps.ui_store()
     api = api_status()
     policy = policy_info()
-    base = {"window_days": WINDOW_DAYS, "policy": policy, "api": api}
+    base = {"window_days": WINDOW_DAYS, "policy": policy, "api": api, "tradeoff": tradeoff()}
     if not available():
         reason = {
             "no_policy": "No credit policy is active yet: review it with `lau policy plan`, approve it with "

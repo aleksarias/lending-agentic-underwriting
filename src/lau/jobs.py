@@ -90,6 +90,14 @@ def main() -> None:
         from lau.console.snapshot import publish
 
         publish(source="job")
+    elif task == "reports":
+        from lau.reports import monthly_if_due
+
+        monthly_if_due()  # last month's improvement report, once, on the first run of a month
+    elif task == "notify":
+        from lau.notify import check
+
+        check()  # fails (and the job's failure email goes out) while a high alert or a held feed file is open
     elif task == "evidence":
         from lau.evidence.run import run_all
 

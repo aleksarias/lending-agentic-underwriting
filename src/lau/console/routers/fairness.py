@@ -13,7 +13,19 @@ import pandas as pd
 from lau.console import deps
 from lau.console.services import config, feedback, reports
 from lau.console.services import definitions as defs
-from lau.console.util import DEF_PARAM, api_router, boolean, iso, loads, num, read_table, sql_str, table_exists, text
+from lau.console.util import (
+    AS_OF_PARAM,
+    DEF_PARAM,
+    api_router,
+    boolean,
+    iso,
+    loads,
+    num,
+    read_table,
+    sql_str,
+    table_exists,
+    text,
+)
 
 router = api_router()
 MAX_HEATMAP_FEATURES = 40
@@ -94,8 +106,15 @@ def _proxy_heatmap(version: str) -> list[dict]:
     ]
 
 
+def _decisions(as_of: str | None) -> dict:
+    from lau.console.util import evidence_as_of
+
+    with evidence_as_of(as_of):
+        return feedback.decision_fairness()
+
+
 @router.get("/fairness")
-def fairness(version: str | None = DEF_PARAM) -> dict:
+def fairness(version: str | None = DEF_PARAM, as_of: str | None = AS_OF_PARAM) -> dict:
     v = defs.resolve_or_404(version)
     th = config.thresholds().get("fairness", {})
     prot = config.protected()
@@ -109,5 +128,5 @@ def fairness(version: str | None = DEF_PARAM) -> dict:
         "proxy_threshold": float(th.get("proxy_auc_flag", 0.65)),
         "prohibited_features": [str(x) for x in prot.get("prohibited_features") or []],
         "findings": findings,
-        "decisions": feedback.decision_fairness(),
+        "decisions": _decisions(as_of),
     }

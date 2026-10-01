@@ -32,7 +32,7 @@ function summarySentence(data: AlertsData, open: AlertItem[]): string {
   const shown = open.slice(0, 3).map(alertBrief);
   const more = open.length > shown.length ? ` and ${open.length - shown.length} more` : "";
   const cycle = count("high") > 0 ? "; a high alert queues an improvement cycle" : "";
-  return `${severities} alert${open.length === 1 ? " is" : "s are"} open from the latest monitoring run (${shown.join(", ")}${more})${cycle}.`;
+  return `${severities} alert${open.length === 1 ? " is" : "s are"} open from the latest checks (${shown.join(", ")}${more})${cycle}.`;
 }
 
 export default function Alerts() {
@@ -77,7 +77,7 @@ export default function Alerts() {
                     title="Open alerts"
                     note={
                       <>
-                        Raised by the latest monitoring run and not yet acknowledged. PSI (population stability index) measures how far a distribution has moved from the baseline
+                        Raised by the latest run of the check that raises it (monitoring, the loan feed, the maturation check) and not yet acknowledged. PSI (population stability index) measures how far a distribution has moved from the baseline
                         built for the definition of default
                         {th.psiWarn != null && th.psiAlert != null
                           ? `: below ${fmtAuc(th.psiWarn, 2)} is stable, from ${fmtAuc(th.psiWarn, 2)} a warning (medium), from ${fmtAuc(th.psiAlert, 2)} an alert (high)`

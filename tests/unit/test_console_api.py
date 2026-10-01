@@ -53,6 +53,7 @@ SHAPES = {
         "recent",
         "policy",
         "api",
+        "tradeoff",
     },
     "/progress": {
         "verdict",
@@ -387,3 +388,13 @@ def test_verdict_is_flagged_stale_when_newer_harness_facts_exist(client):
     finally:
         admin.execute(f"DELETE FROM {admin.fq('ops', 'data_version')} WHERE data_version = 'stale-check'")
         clear_cache()
+
+
+def test_time_travel_shows_evidence_as_it_was(client):
+    now = _get(client, "/progress")
+    assert now["verdict"] is not None and now["as_of"] is None
+    before = _get(client, "/progress", as_of="2000-01-01")  # before any evidence run
+    assert before["verdict"] is None and before["benchmark"] is None and before["as_of"].startswith("2000-01-01T23:59")
+    again = _get(client, "/progress")  # the cache never mixes instants
+    assert again["verdict"] == now["verdict"]
+    assert _get(client, "/parity", as_of="2000-01-01")["available"] is False

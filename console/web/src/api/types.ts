@@ -395,6 +395,8 @@ export interface ProgressData {
   process_health: ProcessHealth;
   denominator: Denominator | null;
   production: Unavailable | ProductionEvidence;
+  /** Set when viewing evidence as of a past instant (time travel) */
+  as_of: ISODate | null;
 }
 
 // -------------------------------------------------------------------------------------------------- definitions
@@ -837,6 +839,15 @@ export interface FeatureRow {
   status: string;
   performance: Record<string, { auc: number | null; missing_rate: number | null; leakage_risk: string | null; proxy_risk: string | null }>;
   used_in: string[];
+  /** Set when a person rejected the feature: the harness fails any candidate that uses it */
+  rejected?: { reason: string; by: string; at: ISODate | null } | null;
+}
+
+export interface PinnedHypothesis {
+  hypothesis_id: string;
+  text: string;
+  by: string;
+  at: ISODate | null;
 }
 
 // ------------------------------------------------------------------------------------------------------- agents
@@ -1099,6 +1110,14 @@ export interface DecisionsData {
   recent: DecisionRow[];
   policy: PolicyInfo | null;
   api: DecisionApiStatus;
+  /** What-if curve for the approval cut-off (ops.policy_tradeoff), when the evidence step has run */
+  tradeoff: {
+    computed_at: ISODate | null;
+    model_label: string | null;
+    window: string;
+    n_applications: number | null;
+    points: { cutoff: number; approval_rate: number | null; expected_bad_rate: number | null; known_n: number; known_bad_rate: number | null; is_policy_approve: boolean; is_policy_refer: boolean }[];
+  } | null;
 }
 
 // --------------------------------------------------------------------------------------------------------- cost
@@ -1162,4 +1181,18 @@ export interface AskResponse {
   queries: { sql: string; rows: number }[];
   cost_usd: number;
   model: string;
+}
+
+// ---------------------------------------------------------------------------------------------- definition proposal
+export interface DefinitionProposal {
+  version: string;
+  short: string;
+  name: string;
+  summary: string;
+  plain_language: string;
+  diff: { field: string; before: unknown; after: unknown }[];
+  approvers: string[];
+  required: number;
+  rebuilds: { stage: string; description: string }[];
+  known_before: boolean;
 }

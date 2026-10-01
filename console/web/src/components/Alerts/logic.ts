@@ -18,6 +18,11 @@ export function alertTitle(a: AlertItem): string {
   if (a.kind === "default_rate") {
     return a.value >= 0 ? `Observed default rate is ${fmtPct(a.value, 0)} above expected` : `Observed default rate is ${fmtPct(-a.value, 0)} below expected`;
   }
+  if (a.kind === "production_default_rate") {
+    const gap = fmtPct(Math.abs(a.value), 0);
+    return a.value >= 0 ? `Matured production loans default ${gap} more than predicted` : `Matured production loans default ${gap} less than predicted`;
+  }
+  if (a.kind === "feed_held") return `Feed file held for review: ${a.subject}`;
   const kind = a.kind.replace(/_/g, " ");
   return `${kind.charAt(0).toUpperCase()}${kind.slice(1)}: ${subjectLabel(a.subject)}`;
 }
@@ -44,6 +49,15 @@ export function alertMeasure(a: AlertItem, th: Thresholds): { value: string; lim
       limit: th.defaultRateTol != null ? `a tolerance of ±${fmtPct(th.defaultRateTol, 0)}` : null,
     };
   }
+  if (a.kind === "production_default_rate") {
+    return {
+      value: `${a.value >= 0 ? "+" : "−"}${fmtPct(Math.abs(a.value), 0)} against the PD the loans were approved at`,
+      limit: th.defaultRateTol != null ? `a tolerance of ±${fmtPct(th.defaultRateTol, 0)}` : null,
+    };
+  }
+  if (a.kind === "feed_held") {
+    return { value: `${fmtPct(a.value, 1)} of its records failed the checks`, limit: "the feed's quarantine limit" };
+  }
   return { value: fmtAuc(a.value, 3), limit: null };
 }
 
@@ -56,10 +70,8 @@ export function psiState(value: number | null, th: Thresholds): "alert" | "warni
 }
 
 export function classify(data: AlertsData) {
-  const runTimes = data.monitoring_runs.map((r) => Date.parse(r.ts)).filter(Number.isFinite);
-  const alertTimes = data.alerts.map((a) => Date.parse(a.ts)).filter(Number.isFinite);
-  const latest = runTimes.length ? Math.max(...runTimes) : alertTimes.length ? Math.max(...alertTimes) : null;
-  const isCurrent = (a: AlertItem) => latest != null && Math.abs(Date.parse(a.ts) - latest) < 2000;
+  // the API decides what is current: raised by the latest run of whatever raises that kind of alert
+  const isCurrent = (a: AlertItem) => a.current;
   const open = data.alerts
     .filter((a) => isCurrent(a) && !a.acknowledged)
     .sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] || b.value - a.value);

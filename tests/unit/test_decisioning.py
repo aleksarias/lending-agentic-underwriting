@@ -470,3 +470,17 @@ def test_console_rollout_actions_follow_the_rules(console, decisioning):
         assert short.status_code == 400
     finally:
         rollout._event(r, "cancelled", "superseded", "test", "cleanup")
+
+
+def test_policy_tradeoff_curve_marks_the_active_cutoffs(decisioning):
+    from lau.evidence.run import run_all
+    from lau.store import get_store
+
+    assert run_all(log=lambda m: None, only="policy_tradeoff")["policy_tradeoff"] > 0
+    st = get_store("harness")
+    df = st.query(f"SELECT * FROM {st.fq('ops', 'policy_tradeoff')}")
+    df = df[df["run_id"] == df.sort_values("computed_at")["run_id"].iloc[-1]].sort_values("cutoff")
+    assert df["approval_rate"].is_monotonic_increasing  # a looser cut-off never approves fewer
+    assert df["expected_bad_rate"].dropna().is_monotonic_increasing
+    assert df[df["is_policy_approve"]]["cutoff"].tolist() == [0.12]
+    assert df[df["is_policy_refer"]]["cutoff"].tolist() == [0.16]

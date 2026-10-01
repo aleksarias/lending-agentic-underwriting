@@ -33,6 +33,8 @@ const KIND_LABELS: Record<string, string> = {
   features: "Feature research",
   modeling: "Modeling report",
   profile: "Data profile",
+  monthly_report: "Monthly improvement report",
+  model_documentation: "Model documentation",
 };
 
 /** Report kind as a reader would name it: "redteam" -> "Red-team review". */
@@ -44,6 +46,8 @@ const REASON_LABELS: Record<string, string> = {
   manual: "Started by a person",
   queued: "Queued request",
   maturation: "Newly matured loans",
+  loans_matured: "Newly matured loans",
+  production_calibration: "Production loans off their predicted default rate",
 };
 
 /** Why a cycle was requested or started. Free-text reasons (demo runs) are shown as written. */

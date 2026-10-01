@@ -12,7 +12,7 @@ import pandas as pd
 from lau.console import deps
 from lau.console.services import config, models
 from lau.console.services import definitions as defs
-from lau.console.util import boolean, integer, iso, num, read_table, short, table_exists, text, ttl_cache
+from lau.console.util import as_of_sql, boolean, integer, iso, num, read_table, short, table_exists, text, ttl_cache
 
 _KEY_RE = re.compile(r"^dpd(?P<dpd>\d+)_(?P<timing>ever|eow)_(?P<window>\d+)m$")
 
@@ -28,7 +28,7 @@ def latest_run() -> pd.DataFrame:
         st,
         "ops",
         "benchmark_results",
-        where=f"run_id = (SELECT run_id FROM {t} ORDER BY computed_at DESC LIMIT 1)",
+        where=f"run_id = (SELECT run_id FROM {t}{as_of_sql()} ORDER BY computed_at DESC LIMIT 1)",
         ts=["computed_at"],
     )
 

@@ -242,3 +242,50 @@ def test_miscalibrated_production_loans_raise_an_alert_and_a_held_file_does_too(
     held_files = _q("feed_files", "ops", "WHERE status = 'held'")
     held = alerts[alerts["kind"] == "feed_held"]
     assert len(held) == len(held_files) and set(held["severity"]) <= {"high"}  # one alert per held file
+
+
+def test_notify_lists_what_needs_a_person(fed):
+    from lau.console.util import clear_cache
+    from lau.feedback import feed
+    from lau.notify import open_items
+
+    month = str(fed["last"])
+    loan = _q("loan_bookings")["loan_id"].iloc[0]
+    bad = {**GOOD, "loan_id": loan, "period_month": month, "status": "in_review", "record_seq": 0}
+    rel = f"loan_feed/{month}/notify-{month}.jsonl"
+    feed.feed_volume().write(rel, (json.dumps(bad) + "\n").encode())
+    feed.ingest(log=lambda m: None)
+    clear_cache()
+    items = open_items()
+    assert any(rel in i and "held" in i for i in items)  # a held file needs a person
+    feed.release(rel, by="alice", log=lambda m: None)
+    clear_cache()
+    assert not any(rel in i for i in open_items())  # released: its alert is no longer open
+
+
+def test_monthly_report_and_model_documentation(fed):
+    from datetime import UTC, datetime
+
+    from lau import reports
+
+    month = datetime.now(UTC).strftime("%Y-%m")  # the decisions in this lake were all made this month
+    rid = reports.monthly(month, log=lambda m: None)
+    body = _q("reports", "experiments", f"WHERE report_id = '{rid}'")["body"].iloc[0]
+    for section in (
+        "## Is it improving?",
+        "## Decisions",
+        "## Production evidence",
+        "## Fairness on actual decisions",
+        "## Loan status feed",
+        "## Needs a person now",
+    ):
+        assert section in body
+    assert "decisions:" in body and "matured" in body
+    assert (
+        reports.monthly(month, log=lambda m: None) == rid
+        and len(_q("reports", "experiments", f"WHERE report_id = '{rid}'")) == 1
+    )
+    doc = reports.model_pack(fed["a"], log=lambda m: None)
+    text = _q("reports", "experiments", f"WHERE report_id = '{doc}'")["body"].iloc[0]
+    assert "## Inputs and adverse-action reasons" in text and "bureau_score" in text and "R01" in text
+    assert "Not a model validation" in text

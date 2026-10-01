@@ -8,7 +8,7 @@ from __future__ import annotations
 import pandas as pd
 
 from lau.console import deps
-from lau.console.util import boolean, integer, iso, num, query, table_exists, text, ttl_cache, unavailable
+from lau.console.util import as_of_sql, boolean, integer, iso, num, query, table_exists, text, ttl_cache, unavailable
 
 
 def _latest_run(table: str, ts: tuple[str, ...] = ("computed_at",)) -> pd.DataFrame:
@@ -16,9 +16,8 @@ def _latest_run(table: str, ts: tuple[str, ...] = ("computed_at",)) -> pd.DataFr
     if not table_exists(st, "ops", table):
         return pd.DataFrame()
     t = st.fq("ops", table)
-    return query(
-        st, f"SELECT * FROM {t} WHERE run_id = (SELECT run_id FROM {t} ORDER BY computed_at DESC LIMIT 1)", ts=ts
-    )
+    latest = f"SELECT run_id FROM {t}{as_of_sql()} ORDER BY computed_at DESC LIMIT 1"
+    return query(st, f"SELECT * FROM {t} WHERE run_id = ({latest})", ts=ts)
 
 
 # ---- feed ----------------------------------------------------------------------------------------------------------

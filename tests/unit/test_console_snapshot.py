@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 
 import pandas as pd
 import pytest
+import yaml
 
 
 class _CountingVolume:
@@ -211,3 +212,44 @@ def test_mirror_mode_runs_actions_through_the_cli(monkeypatch):
     actions.dispatch("ack", alert_id="abc123def456", note="seen", by="eve")
     assert seen[0][:2] == ["decide", "candidate:7"] and "--approver" in seen[0]
     assert seen[1][:2] == ["ack-alert", "abc123def456"]
+
+
+def test_console_previews_and_approves_a_definition_change(lake, cfg_dir, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from lau.console.app import create_app
+    from lau.console.util import clear_cache
+    from lau.definition import registry
+    from lau.store import get_store
+
+    path = cfg_dir / "default_definition.yaml"
+    original = path.read_text()
+    monkeypatch.setenv("LAU_CONSOLE_ACTIONS", "1")
+    client = TestClient(create_app())
+    try:
+        clear_cache()
+        assert client.get("/api/definitions/proposal").json()["proposal"] is None  # the YAML is the active one
+        changed = yaml.safe_load(original)
+        changed["balance_materiality_threshold"] = 37.5  # a change no other test uses: its approval is removed below
+        path.write_text(yaml.safe_dump(changed))
+        clear_cache()
+        p = client.get("/api/definitions/proposal").json()["proposal"]
+        assert p and {d["field"] for d in p["diff"]} == {"balance_materiality_threshold"} and p["approvers"] == []
+        assert any(r["stage"] == "labels" for r in p["rebuilds"])
+        wrong = client.post("/api/definitions/0123456789ab/approve", json={"note": "checked the plan carefully"}).json()
+        assert not wrong["ok"] and "exact hash" in wrong["message"]
+        ok = client.post(f"/api/definitions/{p['version']}/approve", json={"note": "checked the plan carefully"}).json()
+        assert ok["ok"], ok
+        again = client.post(
+            f"/api/definitions/{p['version']}/approve", json={"note": "checked the plan carefully"}
+        ).json()
+        assert not again["ok"] and "already approved" in again["message"]
+        assert len(registry.approvers(get_store("harness"), p["version"])) == 1
+    finally:
+        path.write_text(original)
+        clear_cache()
+        st = get_store("harness")
+        if st.table_exists("ops", "definition_approvals"):
+            st.execute(
+                f"DELETE FROM {st.fq('ops', 'definition_approvals')} WHERE plan_summary = 'checked the plan carefully'"
+            )

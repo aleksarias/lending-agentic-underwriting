@@ -35,7 +35,8 @@ export const useLineage = (name: string | undefined, version: string | undefined
   useQ<T.LineageGraph>(["lineage", name, version], `/lineage/${seg(name ?? "")}/${seg(version ?? "")}`, undefined, undefined, !!name && !!version);
 
 // ------------------------------------------------------------------ progress / definitions / pipeline
-export const useProgress = () => useQ<T.ProgressData>(["progress"], "/progress");
+/** `asOf` (YYYY-MM-DD): the evidence as computed at the end of that day (time travel); omit for now. */
+export const useProgress = (asOf?: string | null) => useQ<T.ProgressData>(["progress", asOf ?? null], "/progress", asOf ? { as_of: asOf } : undefined);
 export const useDefinitions = () => useQ<T.DefinitionVersion[]>(["definitions"], "/definitions");
 export const useDefinition = (version: string | undefined) =>
   useQ<T.DefinitionVersion>(["definition", version], `/definitions/${seg(version ?? "")}`, undefined, undefined, !!version);
@@ -118,5 +119,21 @@ export const useRolloutRollback = () =>
     (v: { rollout_id: string; reason: string }) => apiPost<T.ActionResult>(`/rollouts/${seg(v.rollout_id)}/rollback`, { reason: v.reason }),
     [["rollouts"], ["status"], ["decisions"], ["models"]],
   );
+export const useDefinitionProposal = () => useQ<{ proposal: T.DefinitionProposal | null }>(["definition-proposal"], "/definitions/proposal", undefined, STATUS);
+export const useApproveDefinition = () =>
+  useAction(
+    (v: { version: string; note: string }) => apiPost<T.ActionResult>(`/definitions/${seg(v.version)}/approve`, { note: v.note }),
+    [["definition-proposal"], ["approvals"], ["status"]],
+  );
+export const useHypotheses = () => useQ<T.PinnedHypothesis[]>(["hypotheses"], "/hypotheses");
+export const useFeatureDecision = () =>
+  useAction(
+    (v: { name: string; decision: "reject" | "restore"; reason: string }) =>
+      apiPost<T.ActionResult>(`/features/${seg(v.name)}/decision`, { decision: v.decision, reason: v.reason }),
+    [["features"]],
+  );
+export const usePinHypothesis = () => useAction((v: { text: string }) => apiPost<T.ActionResult>("/hypotheses", v), [["hypotheses"]]);
+export const useUnpinHypothesis = () =>
+  useAction((v: { hypothesis_id: string }) => apiPost<T.ActionResult>(`/hypotheses/${seg(v.hypothesis_id)}/unpin`), [["hypotheses"]]);
 export const useAsk = () =>
   useMutation<T.AskResponse, Error, { question: string }>({ mutationFn: (v) => apiPost<T.AskResponse>("/ask", v) });

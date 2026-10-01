@@ -13,7 +13,7 @@ import pandas as pd
 
 from lau.console import deps
 from lau.console.services import benchmark, evals, feedback, ledger, models, ops
-from lau.console.util import api_router, integer, num, read_table, text
+from lau.console.util import AS_OF_PARAM, api_router, evidence_as_of, integer, iso, num, read_table, text
 
 router = api_router()
 
@@ -130,7 +130,13 @@ def _guardrails(row: dict | None) -> list[dict]:
 
 
 @router.get("/progress")
-def progress() -> dict:
+def progress(as_of: str | None = AS_OF_PARAM) -> dict:
+    """Evidence as computed now, or at `as_of` (time travel: the newest evidence run at or before that instant)."""
+    with evidence_as_of(as_of) as cutoff:
+        return {**_progress(), "as_of": iso(cutoff.tz_localize("UTC")) if cutoff is not None else None}
+
+
+def _progress() -> dict:
     row = ledger.latest()
     return {
         "verdict": ledger.verdict_payload(),

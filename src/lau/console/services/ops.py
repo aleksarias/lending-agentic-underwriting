@@ -625,12 +625,12 @@ def alerts() -> list[dict]:
         return []
     runs = monitoring_runs()
     latest = {"monitoring": pd.Timestamp(runs[0]["ts"]) if runs else df["ts"].max()}
-    for source, table, column in (
-        ("production", "maturation_events", "recorded_at"),
-        ("feed", "feed_files", "ingested_at"),
-    ):
-        run = read_table(deps.ui_store(), "ops", table, columns=[column], ts=[column])
-        latest[source] = run[column].max() if len(run) else None
+    run = read_table(deps.ui_store(), "ops", "maturation_events", columns=["recorded_at"], ts=["recorded_at"])
+    latest["production"] = run["recorded_at"].max() if len(run) else None
+    files = read_table(deps.ui_store(), "ops", "feed_files", columns=["feed_file", "status", "ingested_at"])
+    if len(files):
+        last = files.sort_values("ingested_at").drop_duplicates("feed_file", keep="last")
+        latest["held_files"] = set(last.loc[last["status"] == "held", "feed_file"].astype(str))
     ack = acks()
     out = []
     for r in df.sort_values("ts", ascending=False).to_dict("records"):
@@ -661,12 +661,15 @@ ALERT_SOURCES = {"production_default_rate": "production", "feed_held": "feed"}  
 
 def _is_current(r: dict, latest: dict) -> bool:
     """Raised by the latest run of whatever raises this kind of alert (monitoring, maturation check, feed read)."""
-    when = latest.get(ALERT_SOURCES.get(str(r["kind"]), "monitoring"))
+    if ALERT_SOURCES.get(str(r["kind"])) == "feed":
+        return str(r["subject"]) in latest.get("held_files", set())  # open while the file is still held
+    source = ALERT_SOURCES.get(str(r["kind"]), "monitoring")
+    when = latest.get(source)
     if when is None or pd.isna(when):
         return False
-    if ALERT_SOURCES.get(str(r["kind"])) == "feed":
-        return True  # a held file stays an open problem until it is released (and acknowledged)
-    return abs((pd.Timestamp(r["ts"]) - pd.Timestamp(when)).total_seconds()) < 2
+    # a maturation check stamps its alert with its own time; monitoring runs are matched within 2 s as before
+    tolerance = 0.001 if source == "production" else 2
+    return abs((pd.Timestamp(r["ts"]) - pd.Timestamp(when)).total_seconds()) < tolerance
 
 
 def alert_title(kind: str, subject: str, value: float) -> str:

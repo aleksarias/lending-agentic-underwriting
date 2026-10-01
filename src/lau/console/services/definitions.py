@@ -7,7 +7,7 @@ from typing import Any
 import pandas as pd
 
 from lau.console import deps
-from lau.console.util import integer, iso, loads, num, read_table, short, text, ttl_cache
+from lau.console.util import integer, iso, loads, num, read_table, short, table_exists, text, ttl_cache
 
 # Display order for exclusions (the stored order is alphabetical).
 _EXCLUSION_ORDER = ["fraud_confirmed", "deceased", "early_payoff"]
@@ -319,3 +319,41 @@ def sensitivity() -> dict:
         series.append({"definition_key": str(key), "label": f"{dpd} DPD", "dpd": dpd, "points": points})
     series.sort(key=lambda s: s["dpd"])
     return {"computed_at": iso(df["computed_at"].max()), "series": series}
+
+
+def proposal() -> dict | None:
+    """config/default_definition.yaml when it differs from the active definition: what changes, what rebuilds and who
+    has approved this exact hash. None when the YAML matches the active definition (or cannot be read)."""
+    from lau.console.services import config, ops
+    from lau.definition.registry import diff_definitions
+    from lau.definition.schema import load_definition
+    from lau.governance.approvals import required
+    from lau.settings import CONFIG_DIR
+
+    yaml_v = config.yaml_definition_version()
+    active = active_version()
+    if not yaml_v or yaml_v == active:
+        return None
+    new = load_definition(CONFIG_DIR / "default_definition.yaml")
+    cur = (_load()["versions"].get(active) or {}).get("definition") if active else None
+    diff = [{"field": f, "before": b, "after": a} for f, b, a in diff_definitions(cur, new)]
+    st = deps.ui_store()
+    approvers: list[str] = []
+    if table_exists(st, "ops", "definition_approvals"):
+        df = read_table(
+            st, "ops", "definition_approvals", where=f"definition_version = '{yaml_v}'", order_by="approved_at"
+        )
+        approvers = list(dict.fromkeys(str(x) for x in df["approved_by"])) if len(df) else []
+    fields = new.semantic_dict()
+    return {
+        "version": yaml_v,
+        "short": short(yaml_v),
+        "name": new.metadata.name if getattr(new, "metadata", None) else yaml_v[:8],
+        "summary": summary_text(fields),
+        "plain_language": plain_language(fields),
+        "diff": diff,
+        "approvers": approvers,
+        "required": required("definition"),
+        "rebuilds": [{"stage": n, "description": d} for n, dep, d in ops.stage_catalog() if dep],
+        "known_before": yaml_v in _load()["versions"],
+    }

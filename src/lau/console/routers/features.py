@@ -1,4 +1,8 @@
-"""Console API: GET /api/features (screen 13, features lab).
+"""Console API (screen 13, features lab):
+- GET /api/features                      proposals, measured performance, usage, and a person's rejection if any
+- POST /api/features/{name}/decision     {decision: reject|restore, reason}; the harness enforces rejections
+- GET /api/hypotheses                    hypotheses people pinned for the next plans
+- POST /api/hypotheses {text}            pin one;  POST /api/hypotheses/{id}/unpin
 
 Feature proposals are agent output (feature_registry.features); their measured performance per definition comes
 from the pipeline's re-evaluation (feature_registry.feature_performance); usage from harness evaluations.
@@ -8,9 +12,11 @@ Contract: docs/console/contract.md and console/web/src/api/types.ts.
 
 from __future__ import annotations
 
-from lau.console import deps
+from fastapi import Body, Depends, HTTPException, Request
+
+from lau.console import actions, deps
 from lau.console.services import models
-from lau.console.util import api_router, iso, loads, num, read_table, text, ttl_cache
+from lau.console.util import api_router, clear_cache, iso, loads, num, read_table, safe_token, text, ttl_cache
 
 router = api_router()
 
@@ -49,6 +55,7 @@ def features() -> list[dict]:
                 "proxy_risk": text(r.get("proxy_risk")),
             }
     usage = _usage()
+    rejected = _rejected()
     return [
         {
             "name": str(r["name"]),
@@ -62,6 +69,64 @@ def features() -> list[dict]:
             "status": str(text(r.get("status")) or ""),
             "performance": by_name.get(str(r["name"]), {}),
             "used_in": usage.get(str(r["name"]), []),
+            "rejected": rejected.get(str(r["name"])),
         }
         for r in df.sort_values("created_at", ascending=False).to_dict("records")
     ]
+
+
+def _rejected() -> dict[str, dict]:
+    from lau.governance.human_input import rejected_features
+
+    try:
+        found = rejected_features(deps.ui_store())
+    except Exception:  # noqa: BLE001 - not visible yet
+        return {}
+    return {k: {"reason": v["reason"], "by": v["by_user"], "at": iso(v["ts"])} for k, v in found.items()}
+
+
+@router.post("/features/{name}/decision", dependencies=[Depends(deps.require_actions)])
+def feature_decision(name: str, request: Request, body: dict = Body(default={})) -> dict:
+    if not safe_token(name):
+        raise HTTPException(status_code=400, detail="invalid feature name")
+    decision = str(body.get("decision") or "")
+    if decision not in ("reject", "restore"):
+        raise HTTPException(status_code=400, detail="decision must be reject or restore")
+    result = actions.dispatch(
+        "feature_decision",
+        name=name,
+        decision=decision,
+        reason=str(body.get("reason") or ""),
+        by=deps.current_user(request),
+    )
+    clear_cache()
+    return result
+
+
+@router.get("/hypotheses")
+def hypotheses() -> list[dict]:
+    from lau.governance.human_input import pinned
+
+    try:
+        rows = pinned(deps.ui_store())
+    except Exception:  # noqa: BLE001 - none yet
+        return []
+    return [
+        {"hypothesis_id": h["hypothesis_id"], "text": h["text"], "by": h["by_user"], "at": iso(h["ts"])} for h in rows
+    ]
+
+
+@router.post("/hypotheses", dependencies=[Depends(deps.require_actions)])
+def pin_hypothesis(request: Request, body: dict = Body(default={})) -> dict:
+    result = actions.dispatch("hypothesis_pin", text=str(body.get("text") or ""), by=deps.current_user(request))
+    clear_cache()
+    return result
+
+
+@router.post("/hypotheses/{hypothesis_id}/unpin", dependencies=[Depends(deps.require_actions)])
+def unpin_hypothesis(hypothesis_id: str, request: Request) -> dict:
+    if not safe_token(hypothesis_id):
+        raise HTTPException(status_code=400, detail="invalid id")
+    result = actions.dispatch("hypothesis_unpin", hypothesis_id=hypothesis_id, by=deps.current_user(request))
+    clear_cache()
+    return result

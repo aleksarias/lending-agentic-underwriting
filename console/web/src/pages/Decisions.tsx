@@ -13,6 +13,7 @@ import { BarSeriesChart, useChartColors } from "../components/charts";
 import { Banner, Card, CodeBlock, DataTable, EmptyState, KeyValue, Page, PageHeader, Pill, QueryView, Section, Tiles, TimeAgo, type Column } from "../components/ui";
 import { fmtDateTime, fmtNum, fmtPct, shortVersion } from "../lib/format";
 import { OutcomePill } from "../components/Decisions/OutcomePill";
+import { WhatIfSection } from "../components/Decisions/WhatIf";
 import "../components/Decisions/Decisions.css";
 
 const PATH_LABEL: Record<string, string> = { model: "Model and policy", knockout: "Knock-out rule", legacy: "Legacy policy" };
@@ -60,6 +61,7 @@ export default function Decisions() {
             <ApiSection api={d.api} />
             {d.available ? <LiveSections d={d} /> : <NextStep d={d} />}
             <PolicySection policy={d.policy} />
+            {d.tradeoff && d.tradeoff.points.length > 0 && <WhatIfSection t={d.tradeoff} />}
           </>
         )}
       </QueryView>

@@ -163,6 +163,21 @@ def dd_plan(
             _log(f"approval recorded: {aid}")
 
 
+@dd.command("approve")
+def dd_approve(
+    version: str = typer.Argument(..., help="the exact hash of config/default_definition.yaml"),
+    note: str = typer.Option(..., "--note", help="what you checked"),
+    approver: str = typer.Option("", "--approver", help="who approves (default: the OS user)"),
+    as_json: bool = typer.Option(False, "--json", help="print one JSON ActionResult line"),
+) -> None:
+    """Record a person's approval of the YAML definition's exact hash (two-person rule; the console uses this)."""
+    import getpass
+
+    from lau.console import actions
+
+    _action_done(_guard(actions.definition_approve, version, note, approver or getpass.getuser()), as_json)
+
+
 @dd.command("apply")
 def dd_apply(
     yes: bool = typer.Option(False, "--yes", help="Confirm non-interactively (you are the approver)."),
@@ -491,6 +506,74 @@ def cost_cmd(days: int = 7) -> None:
 
     _log(cost.billing_actuals(days).to_string(index=False) or "(no billing rows yet)")
     _log(f"month-to-date logged: ${cost.month_to_date_usd():.2f}")
+
+
+features_app = typer.Typer(no_args_is_help=True, help="People's input to the loop: reject features, pin hypotheses.")
+app.add_typer(features_app, name="features")
+
+
+@features_app.command("decide")
+def features_decide(
+    name: str,
+    decision: str = typer.Option(..., "--decision", help="reject or restore"),
+    reason: str = typer.Option(..., "--reason"),
+    by: str = typer.Option("", "--by"),
+    as_json: bool = typer.Option(False, "--json", help="print one JSON ActionResult line"),
+) -> None:
+    """Reject a registered feature (the harness then fails any candidate using it), or restore it."""
+    import getpass
+
+    from lau.console import actions
+
+    _action_done(_guard(actions.feature_decision, name, decision, reason, by or getpass.getuser()), as_json)
+
+
+@features_app.command("pin")
+def features_pin(
+    text: str,
+    by: str = typer.Option("", "--by"),
+    as_json: bool = typer.Option(False, "--json", help="print one JSON ActionResult line"),
+) -> None:
+    """Pin a hypothesis for the planner of every next cycle."""
+    import getpass
+
+    from lau.console import actions
+
+    _action_done(_guard(actions.hypothesis_pin, text, by or getpass.getuser()), as_json)
+
+
+@features_app.command("unpin")
+def features_unpin(
+    hypothesis_id: str,
+    by: str = typer.Option("", "--by"),
+    as_json: bool = typer.Option(False, "--json", help="print one JSON ActionResult line"),
+) -> None:
+    """Unpin a hypothesis."""
+    import getpass
+
+    from lau.console import actions
+
+    _action_done(_guard(actions.hypothesis_unpin, hypothesis_id, by or getpass.getuser()), as_json)
+
+
+report_app = typer.Typer(no_args_is_help=True, help="Dated reports from the evidence (monthly | model).")
+app.add_typer(report_app, name="report")
+
+
+@report_app.command("monthly")
+def report_monthly(month: str = typer.Option(None, "--month", help="YYYY-MM (default: last month)")) -> None:
+    """The monthly improvement report (experiments.reports, kind monthly_report)."""
+    from lau.reports import monthly
+
+    _guard(monthly, month, _log)
+
+
+@report_app.command("model")
+def report_model(production_version: str) -> None:
+    """A documentation draft for a production model version (experiments.reports, kind model_documentation)."""
+    from lau.reports import model_pack
+
+    _guard(model_pack, production_version, _log)
 
 
 @app.command("console")
