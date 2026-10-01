@@ -56,6 +56,12 @@ def schema_ddl(s: Settings) -> list[str]:
     return out
 
 
+def admin_serving_grants(s: Settings, user: str) -> list[str]:
+    """The person running `lau init` creates the decision endpoint, which serves models the promoter registered: the
+    endpoint's creator needs EXECUTE on them (UC ownership of the catalog does not include it)."""
+    return [f"GRANT USE SCHEMA, EXECUTE ON SCHEMA `{s.catalog}`.`{s.schema('production')}` TO `{user}`"]
+
+
 def landing_volume_grants(s: Settings, ids: dict[str, str]) -> list[str]:
     """Each role may stage files only in the landing volumes of schemas it can write."""
     from lau.governance.grants import can_write
@@ -190,6 +196,9 @@ def run_init(log: Callable[[str], None] = print) -> WorkspaceState:
     for stmt in grant_statements(s, ids, skip_objects=True) + landing_volume_grants(s, ids):
         st._execute(stmt)
     log(f"applied {len(grant_statements(s, ids, skip_objects=True))} schema/catalog grants + landing volume grants")
+    for stmt in admin_serving_grants(s, w.current_user.me().user_name):
+        st._execute(stmt)
+    log("granted you EXECUTE on production models (to create the decision endpoint)")
 
     # 4. MLflow experiment + permissions
     state.experiment_id = principals.ensure_experiment(w, s, state, log)

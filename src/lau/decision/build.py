@@ -213,7 +213,7 @@ def deploy(version: str | None = None, create: bool = False, log=print) -> dict:
         log(f"creating endpoint {cfg['name']} ({cfg['workload_size']}, scale to zero) serving v{version}...")
         ep = w.serving_endpoints.create_and_wait(
             name=cfg["name"],
-            config=EndpointCoreConfigInput(served_entities=[entity]),
+            config=EndpointCoreConfigInput(name=cfg["name"], served_entities=[entity]),
             ai_gateway=AiGatewayConfig(
                 inference_table_config=AiGatewayInferenceTableConfig(
                     catalog_name=s.catalog,

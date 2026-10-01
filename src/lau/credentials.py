@@ -53,11 +53,11 @@ def databricks_config(role: str):
     if os.environ.get("LAU_RUNTIME_ROLE") == role:
         return Config()  # inside a Databricks job: the job's run_as identity, native auth
     if role == "admin":
+        profile = vals.get("DATABRICKS_CONFIG_PROFILE")
+        if profile:  # OAuth (U2M) through the Databricks CLI's token cache: preferred over a PAT
+            return Config(profile=profile, host=host())
         if vals.get("DATABRICKS_TOKEN"):
             return Config(host=host(), token=vals["DATABRICKS_TOKEN"], auth_type="pat")
-        profile = vals.get("DATABRICKS_CONFIG_PROFILE")
-        if profile:
-            return Config(profile=profile, host=host())
         raise CredentialsMissingError(
             "Admin Databricks credentials missing. In .env set DATABRICKS_CONFIG_PROFILE (after "
             "`databricks auth login --host <host> --profile <name>`) or DATABRICKS_TOKEN."

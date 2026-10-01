@@ -332,7 +332,7 @@ make teardown                             # remove everything the project create
 
 `lau-definition-sync` (applies a changed definition only with a recorded approval), `lau-shadow-scoring`,
 `lau-daily` (definition sync, synthetic decisions, the loan status feed, shadow scoring, monitoring, evidence and the console snapshot, in that order, waking the warehouse once a day) and `lau-improvement-cycle` (weekly; runs when `ops.cycle_queue` has work). All run on serverless compute as
-the harness service principal and are deployed **paused**. Targets: `dev` (this workspace) and `prod` (placeholder).
+the harness service principal. In `dev` (this workspace) the schedules run (`schedule_pause_status: UNPAUSED` in `databricks.yml`); `prod` (placeholder) deploys them paused.
 
 ## Underwriting Console (web UI)
 

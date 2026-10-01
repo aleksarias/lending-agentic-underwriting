@@ -168,7 +168,8 @@ def transport(kind: str = "auto"):
         return Endpoint()
     from lau.decision.build import endpoint_state
 
-    return Endpoint() if endpoint_state().get("exists") else InProcess()
+    state = endpoint_state()  # while the endpoint is created or updated, the same live model decides in process
+    return Endpoint() if state.get("exists") and state.get("ready") and not state.get("updating") else InProcess()
 
 
 def send(requests: list[dict], via, batch_size: int) -> tuple[list[dict], list[dict], list[float]]:

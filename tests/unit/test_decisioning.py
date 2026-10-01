@@ -484,3 +484,41 @@ def test_policy_tradeoff_curve_marks_the_active_cutoffs(decisioning):
     assert df["expected_bad_rate"].dropna().is_monotonic_increasing
     assert df[df["is_policy_approve"]]["cutoff"].tolist() == [0.12]
     assert df[df["is_policy_refer"]]["cutoff"].tolist() == [0.16]
+
+
+def test_endpoint_creation_builds_valid_sdk_requests(monkeypatch):
+    """Construct the real SDK request objects (a fake client records them): catches SDK signature changes offline."""
+    from types import SimpleNamespace
+
+    from lau.decision import build
+    from lau.settings import get_settings
+
+    calls = {}
+
+    class FakeEndpoints:
+        def create_and_wait(self, name, **kw):
+            calls["create"] = (name, kw)
+            return SimpleNamespace(id="ep-1")
+
+        def update_config_and_wait(self, name, **kw):
+            calls["update"] = (name, kw)
+
+    fake = SimpleNamespace(serving_endpoints=FakeEndpoints())
+    s = get_settings()
+    monkeypatch.setattr(s.project, "backend", "databricks")
+    monkeypatch.setattr(build, "_workspace", lambda role: fake)
+    monkeypatch.setattr(build, "_endpoint_permissions", lambda w, eid: calls.setdefault("perms", eid))
+    monkeypatch.setattr(build, "live", lambda: ("3", {}))
+    monkeypatch.setattr(build, "endpoint_state", lambda: {"exists": False})
+    assert build.deploy(create=False, log=lambda m: None)["deployed"] is False  # creating is compute: only with create
+    out = build.deploy(create=True, log=lambda m: None)
+    name, kw = calls["create"]
+    assert out["created"] and name == "lau-decision" and kw["config"].name == "lau-decision"
+    entity = kw["config"].served_entities[0]
+    assert (entity.entity_version, entity.workload_size, entity.scale_to_zero_enabled) == ("3", "Small", True)
+    assert kw["ai_gateway"].inference_table_config.table_name_prefix == "lau_decision" and calls["perms"] == "ep-1"
+    monkeypatch.setattr(build, "endpoint_state", lambda: {"exists": True, "served_version": "3"})
+    assert build.deploy(create=False, log=lambda m: None)["changed"] is False
+    monkeypatch.setattr(build, "endpoint_state", lambda: {"exists": True, "served_version": "2"})
+    build.deploy(create=False, log=lambda m: None)
+    assert calls["update"][0] == "lau-decision" and calls["update"][1]["served_entities"][0].entity_version == "3"
