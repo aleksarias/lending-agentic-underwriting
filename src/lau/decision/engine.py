@@ -53,6 +53,7 @@ def _monthly(tx: pd.DataFrame, months: int) -> pd.DataFrame:
 
     con = duckdb.connect()
     try:
+        con.execute("SET threads TO 1")  # one summation order: the same request always gets identical features
         con.register("submitted_transactions", tx)
         return con.execute(monthly_sql("submitted_transactions", months)).df()
     finally:

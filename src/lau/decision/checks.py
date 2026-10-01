@@ -24,6 +24,11 @@ from lau.decision.pyfunc import to_request_row
 from lau.settings import get_settings
 from lau.store import get_store
 
+# Cash-flow features are rounded to 4 decimals by the shared summariser. The training path aggregates on the
+# warehouse, the served path on DuckDB: their floating-point sums can land on opposite sides of a rounding boundary,
+# so one unit in the last decimal is the same feature; anything larger is a real difference.
+ROUNDING_UNIT = 1e-4
+
 
 def _record(check: str, passed: bool, details: dict, build_id: str | None) -> dict:
     row = {
@@ -63,13 +68,15 @@ def parity(n: int = 200, log=print) -> dict:
     requests = traffic.build_requests(raw, tx, prefix="parity-")
     served = engine.request_frame(requests, model.months_history)
 
-    feature_gaps = {}
+    feature_gaps, boundary = {}, 0
     for c in CASHFLOW_FEATURES:
         a = pd.to_numeric(served[c], errors="coerce").to_numpy(float)
         b = pd.to_numeric(curated[c], errors="coerce").to_numpy(float)
         both_nan = np.isnan(a) & np.isnan(b)
         diff = np.where(both_nan, 0.0, np.abs(a - b))
-        feature_gaps[c] = float(np.nanmax(np.where(np.isnan(diff), np.inf, diff))) if len(diff) else 0.0
+        diff = np.where(np.isnan(diff), np.inf, diff)  # missing on one side only is a real difference
+        feature_gaps[c] = float(diff.max()) if len(diff) else 0.0
+        boundary += int(((diff > 1e-9) & (diff <= ROUNDING_UNIT + 1e-9)).sum())
     pd_gap = None
     if model.serving is not None:
         decided = model.decide(requests)
@@ -78,10 +85,11 @@ def parity(n: int = 200, log=print) -> dict:
         trained_pd = np.round(model.serving.predict_pd(curated[keep]), 6) if any(keep) else np.array([])
         pd_gap = float(np.max(np.abs(served_pd - trained_pd))) if len(served_pd) else 0.0
     worst = max(feature_gaps.values()) if feature_gaps else 0.0
-    passed = worst <= 1e-9 and (pd_gap is None or pd_gap <= 1e-6)
+    passed = worst <= ROUNDING_UNIT + 1e-9 and (pd_gap is None or pd_gap <= 1e-6)
     details = {
         "n": len(raw),
         "max_feature_gap": worst,
+        "rounding_boundary_values": boundary,
         "feature_gaps": {k: v for k, v in feature_gaps.items() if v > 0},
         "max_pd_gap": pd_gap,
     }
