@@ -1,0 +1,13 @@
+/* Decisions screen. Class names start with "decisions-". */
+.decisions-annot { margin: 0; display: grid; }
+.decisions-annot > div { display: grid; grid-template-columns: minmax(110px, 0.55fr) minmax(0, 1fr) minmax(0, 1.7fr); gap: 4px 18px; padding: 10px 0; border-bottom: 1px solid var(--line); align-items: start; }
+.decisions-annot > div:last-child { border-bottom: 0; }
+.decisions-annot dt { color: var(--muted); font-size: var(--fs-sm); }
+.decisions-annot dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.decisions-annot .value { font-weight: 600; font-variant-numeric: tabular-nums; }
+.decisions-annot .why { color: var(--muted); font-size: var(--fs-sm); }
+.decisions-reasons { margin: 0; padding-left: 20px; display: grid; gap: 4px; font-weight: 400; }
+.decisions-reasons li { padding-left: 2px; }
+@media (max-width: 720px) {
+  .decisions-annot > div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+}

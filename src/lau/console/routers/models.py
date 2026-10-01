@@ -39,6 +39,7 @@ def model_list() -> list[dict]:
         return []
     ev = evals.latest_per_ref(evals.evaluations())
     by_ref = {str(r["candidate_ref"]): r for r in ev.to_dict("records")} if len(ev) else {}
+    n_features = evals.feature_counts()
     out = []
     for r in reg.to_dict("records"):
         e = by_ref.get(_eval_ref(r))
@@ -50,7 +51,7 @@ def model_list() -> list[dict]:
                 "aliases": list(r.get("aliases") or []),
                 "created_at": iso(r.get("created_at")),
                 "model_type": text(tags.get("model_type")),
-                "n_features": integer(tags.get("n_features")),
+                "n_features": integer(tags.get("n_features")) or (n_features.get(str(e["eval_id"])) if e else None),
                 "val_auc": e.get("val_auc") if e else None,
                 "passed_validation": bool(e["passed_validation"])
                 if e and e.get("passed_validation") is not None

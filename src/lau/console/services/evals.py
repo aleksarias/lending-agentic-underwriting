@@ -59,6 +59,24 @@ def summaries(df: pd.DataFrame) -> list[dict]:
     return [summary_from_row(r) for r in df.to_dict("records")] if len(df) else []
 
 
+@ttl_cache(60)
+def feature_counts() -> dict[str, int]:
+    """{eval_id: number of model features} for the newest evaluation of each ref (read from result_json)."""
+    df = latest_per_ref(evaluations())
+    if df.empty:
+        return {}
+    ids = ", ".join(sql_str(x) for x in df["eval_id"])
+    rows = read_table(
+        deps.ui_store(), "ops", "evaluations", columns=["eval_id", "result_json"], where=f"eval_id IN ({ids})"
+    )
+    out = {}
+    for r in rows.to_dict("records") if len(rows) else []:
+        feats = ((loads(r.get("result_json"), {}) or {}).get("model") or {}).get("features")
+        if isinstance(feats, list):
+            out[str(r["eval_id"])] = len(feats)
+    return out
+
+
 def latest_evaluation_row(candidate_ref: str) -> dict | None:
     df = evaluations()
     if df.empty:
@@ -94,6 +112,7 @@ def evaluation_detail(eval_id: str) -> dict | None:
             "approval_rates": {str(k): num(v) for k, v in (c.get("approval_rates") or {}).items()},
             "air": {str(k): num(v) for k, v in (c.get("air") or {}).items()},
             "min_air": num(c.get("min_air")),
+            "mean_pd": {str(k): num(v) for k, v in (c.get("mean_pd") or {}).items()},
         }
         for name, c in (fair.get("classes") or {}).items()
     }
@@ -138,8 +157,17 @@ def evaluation_detail(eval_id: str) -> dict | None:
             }
             for x in (res.get("leakage") or [])
         ],
-        "fairness": {"cutoff_pd": num(fair.get("cutoff_pd")), "min_air": num(fair.get("min_air")), "classes": classes},
+        "fairness": {
+            "cutoff_pd": num(fair.get("cutoff_pd")),
+            "min_air": num(fair.get("min_air")),
+            "n": integer(fair.get("n")),
+            "classes": classes,
+        },
         "proxies_flagged": [str(x) for x in (res.get("proxies_flagged") or [])],
+        "proxy_detail": res.get("proxy_detail") or {},
+        "prohibited_features_used": [str(x) for x in (res.get("prohibited_features_used") or [])],
+        "best_known": res.get("best_known") or None,
+        "versions": {str(k): str(v) for k, v in (res.get("versions") or {}).items()} or None,
         "reason_codes": {
             "quality": res.get("reason_code_quality") or {},
             "sample": [
@@ -262,7 +290,7 @@ def definition_approval_records() -> list[dict]:
                 "definition_version": str(r["definition_version"]),
                 "decision": "approve",
                 "approver": str(r.get("approved_by") or ""),
-                "rationale": str(text(r.get("plan_summary")) or "")[:600],
+                "rationale": str(text(r.get("plan_summary")) or "")[:20000],
                 "ts": iso(r["approved_at"]),
             }
         )

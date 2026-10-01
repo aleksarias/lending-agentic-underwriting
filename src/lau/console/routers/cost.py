@@ -29,6 +29,9 @@ def cost() -> dict:
         if cid:
             by_cycle.setdefault(cid, {"cycle_id": cid, "anthropic": 0.0, "databricks": 0.0})[bucket] += usd
     runs = ops.agent_runs()
+    live = ops.running_cycle()
+    if live is not None and len(runs):  # a running cycle logs its cost when it ends; count its runs then too
+        runs = runs[runs["cycle_id"] != live["cycle_id"]]
     by_agent = []
     if len(runs):
         costed = runs[runs["cost_usd"].fillna(0) > 0]

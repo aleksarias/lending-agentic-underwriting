@@ -593,6 +593,9 @@ def alerts() -> list[dict]:
                 "definition_version": str(r.get("definition_version") or ""),
                 "acknowledged": aid in ack,
                 "ack_by": (ack.get(aid) or {}).get("by"),
+                "ack_at": (ack.get(aid) or {}).get("at"),
+                "ack_note": (ack.get(aid) or {}).get("note"),
+                "title": alert_title(str(r["kind"]), str(r["subject"]), num(r.get("value")) or 0.0),
                 "current": abs((pd.Timestamp(r["ts"]) - latest).total_seconds()) < 2,
             }
         )
@@ -602,6 +605,7 @@ def alerts() -> list[dict]:
 def alert_title(kind: str, subject: str, value: float) -> str:
     """Plain-language alert headline, e.g. "Score distribution shifted (PSI 0.302)"."""
     what = "Score" if subject == "score" else subject.replace("_", " ")
+    what = what[:1].upper() + what[1:]
     if kind == "psi":
         return f"{what} distribution shifted (PSI {value:.3f})"
     if kind == "default_rate":

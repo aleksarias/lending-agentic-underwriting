@@ -211,6 +211,8 @@ export interface CycleSummary {
 export interface CycleLive {
   cycle_id: string;
   definition_version: string;
+  /** why the cycle was requested (definition change, monitoring alert, manual, ...) */
+  reason: string;
   started_at: ISODate;
   state: "running" | "stopping";
   current_step: string | null;
@@ -397,6 +399,11 @@ export interface DefinitionVersion {
   version: string;
   short: string;
   name: string;
+  /** e.g. "60 DPD ever / 12 months" (same as DefinitionRef) */
+  summary: string;
+  dpd: number;
+  timing: "ever" | "end_of_window";
+  window_months: number;
   description: string;
   plain_language: string;
   fields: Record<string, unknown>;
@@ -432,7 +439,8 @@ export interface PipelineData {
 // ------------------------------------------------------------------------------------------------------ history
 export interface EventsPage {
   events: EventItem[];
-  next_before: ISODate | null;
+  /** Opaque cursor for the next (older) page: pass it back as `before`. Null when there are no older events. */
+  next_before: string | null;
 }
 
 export interface ChangeSet {
@@ -480,7 +488,9 @@ export interface QueueItem {
 export interface UpcomingData {
   jobs: JobInfo[] | Unavailable;
   queue: QueueItem[];
+  /** The latest plan the planner submitted (it has already run); the next cycle's planner starts from it */
   next_plan: Record<string, unknown> | null;
+  next_plan_cycle_id: string | null;
   waiting: WaitingItem[];
   forecast: {
     month_end_usd: number | null;
@@ -489,6 +499,7 @@ export interface UpcomingData {
     holdout_remaining: number;
     maturation: { definition_version: string; months_until_next_window: number | null; note: string } | null;
   };
+  /** Open questions: proposed features no model has used yet, lessons not yet re-verified under the active definition */
   backlog: { hypothesis: string; source: string }[];
 }
 
@@ -566,9 +577,17 @@ export interface ModelCard {
 export interface FairnessDetail {
   cutoff_pd: number | null;
   min_air: number | null;
+  /** applications the ratios were computed on (group sizes are not stored) */
+  n?: number | null;
   classes: Record<
     string,
-    { reference_group: string; approval_rates: Record<string, number>; air: Record<string, number>; min_air: number | null }
+    {
+      reference_group: string;
+      approval_rates: Record<string, number>;
+      air: Record<string, number>;
+      min_air: number | null;
+      mean_pd?: Record<string, number | null>;
+    }
   >;
 }
 
@@ -584,6 +603,12 @@ export interface EvaluationDetail extends EvaluationSummary {
   leakage: { column: string; risk: string; reasons: string[] }[];
   fairness: FairnessDetail;
   proxies_flagged: string[];
+  proxy_detail?: Record<string, unknown>;
+  prohibited_features_used?: string[];
+  /** best-known-model comparison recorded by the harness (newer evaluations), or null */
+  best_known?: Record<string, unknown> | null;
+  /** config/code versions the evaluation ran with (newer evaluations), or null */
+  versions?: Record<string, string> | null;
   reason_codes: {
     quality: Record<string, unknown>;
     sample: { application_id: string; rank: number; feature: string; reason_text: string }[];
@@ -596,6 +621,9 @@ export interface EvaluationDetail extends EvaluationSummary {
 export interface PerformanceData {
   definition_version: string;
   definitions: DefinitionRef[];
+  /** multiple-testing state of this definition: tests since the last reset and the margin the next test must clear */
+  tests_since_reset: number;
+  next_margin: number | null;
   evaluations: EvaluationSummary[];
   ledger: {
     n_tests: number;
@@ -752,6 +780,10 @@ export interface EvidencePacket {
   reports: ReportMeta[];
   fairness_min_air: number | null;
   cost_usd: number | null;
+  /** The latest human decision on this candidate (for any gate), if one was recorded */
+  decision: ApprovalRecord | null;
+  promotion: Promotion | null;
+  holdout: { used: number; budget: number };
   can_run_gate: boolean;
   can_decide: boolean;
   can_promote: boolean;
@@ -799,6 +831,12 @@ export interface AlertItem {
   definition_version: string;
   acknowledged: boolean;
   ack_by: string | null;
+  ack_at: ISODate | null;
+  ack_note: string | null;
+  /** Plain-language headline, e.g. "Score distribution shifted (PSI 0.302)" */
+  title: string;
+  /** Raised by the latest monitoring run (older alerts were re-evaluated since) */
+  current: boolean;
 }
 
 export interface AlertsData {

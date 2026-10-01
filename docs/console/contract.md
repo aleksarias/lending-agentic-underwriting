@@ -50,28 +50,28 @@ unknown ones, 403 for actions while disabled, all as `{"detail": "..."}`. Respon
 |---|---|---|---|
 | `/status` | `StatusSummary` | ops.active_definition, definition_versions, model_registry, improvement_ledger, cycles, cycle_heartbeat, cost_log, approvals/gate_results/evaluations (for waiting), alerts, config/default_definition.yaml | cached 10 s |
 | `/overview` | `OverviewData` | as status + events + pipeline_state | status sentence is deterministic text, no LLM |
-| `/activity` | `ActivityData` | cycles, cycle_heartbeat, cycle_control, agent_trace, pipeline_state, config budgets | poll every 5 s |
+| `/activity` | `ActivityData` | cycles, cycle_heartbeat, cycle_control, agent_trace, pipeline_state, config budgets | poll every 5 s; during an agent run the orchestrator writes a heartbeat and flushes the trace every 60 s |
 | `/activity/trace?cycle_id&[after]` | `TraceEntry[]` | agent_trace | incremental |
 | POST `/activity/stop` `{cycle_id, reason}` | `ActionResult` | writes ops.cycle_control (harness store) | actions only |
 | `/decisions` | `DecisionsData` | — | live = Unavailable until the decision endpoint exists |
 | `/progress` | `ProgressData` | improvement_ledger, benchmark_results, evaluations, experiment_counter, gate_results, cycles, cost_log, model_registry, harness_reference | |
-| `/events?[types]&[definition]&[before]&[limit=100]` | `EventsPage` | assembled in Python from: active_definition, data_version, pipeline_state, cycles, evaluations, gate_results, approvals, definition_approvals, production.promotions, alerts, config_versions, experiments.reports, benchmark_results | newest first |
+| `/events?[types]&[definition]&[before]&[limit=100]` | `EventsPage` (ids unique; `next_before` is an opaque `timestamp~id` cursor to pass back as `before`, so ties at a page boundary are neither lost nor repeated; unknown definition 404) | assembled in Python from: active_definition, data_version, pipeline_state, cycles, evaluations, gate_results, approvals, definition_approvals, production.promotions, alerts, config_versions, experiments.reports, benchmark_results | newest first |
 | `/changes?from&to` | `ChangeSet` | active_definition/definition_versions, model_registry, config_versions, data_version, events | version-vector diff between two instants |
 | `/cycles` | `CycleSummary[]` | cycles | |
 | `/cycles/{cycle_id}` | `CycleDetail` | cycles, agent_trace, experiments.reports; cycle_report.md from `reports/cycles/<id>/` if present | |
 | `/lineage/{model_name}/{version}` | `LineageGraph` | model_registry, evaluations, gate_results, approvals, promotions, data_version, definition_versions, feature_registry.features | |
-| `/definitions` | `DefinitionVersion[]` | definition_versions, active_definition, label_stats, labels.split_meta | newest first |
+| `/definitions` | `DefinitionVersion[]` (with `summary`, `dpd`, `timing`, `window_months`) | definition_versions, active_definition, label_stats, labels.split_meta | newest first |
 | `/definitions/{version}` | `DefinitionVersion` | same | |
 | `/definitions/sensitivity` | `SensitivityData` | ops.definition_sensitivity | |
-| `/pipeline?[def]` | `PipelineData` | pipeline_state (fingerprint freshness via lau.pipeline.stages.build_pipeline plan when possible, else latest status) | |
-| `/upcoming` | `UpcomingData` | cycle_queue, improvement_ledger (denominator), gate_results, cost_log, agent_trace (latest submit_plan), feature_registry.features (proposed), resources/jobs.yml | `jobs` are the schedules declared in the Asset Bundle (deployed paused; the console identity has no Jobs API permission), so `next_run_at`/`last_*` are null |
+| `/pipeline?[def]` | `PipelineData` (unknown def 404) | pipeline_state (fingerprint freshness via lau.pipeline.stages.build_pipeline plan when possible, else latest status) | |
+| `/upcoming` | `UpcomingData` (`next_plan` is the latest plan, already run, with `next_plan_cycle_id`; `backlog` = proposed features no model has used yet plus lessons awaiting re-verification under the active definition) | cycle_queue, improvement_ledger (denominator), gate_results, cost_log, agent_trace (latest submit_plan), feature_registry.features (proposed), resources/jobs.yml | `jobs` are the schedules declared in the Asset Bundle (deployed paused; the console identity has no Jobs API permission), so `next_run_at`/`last_*` are null |
 | `/models` | `ModelVersion[]` | ops.model_registry, evaluations | |
 | `/models/{name}/{version}` | `ModelCard` | model_registry, evaluations, gate_results, experiments.reports, approvals, feature_registry.features, benchmark_results | |
-| `/performance?[def]` | `PerformanceData` | evaluations, gate_results, definition_versions | |
-| `/evaluations/{eval_id}` | `EvaluationDetail` | evaluations.result_json | |
-| `/fairness?[def]` | `FairnessData` | evaluations (fairness), ops.proxy_scan, config protected_classes/thresholds, experiments.reports (kind=compliance) | |
+| `/performance?[def]` | `PerformanceData` | evaluations, gate_results, definition_versions, experiment_counter | `tests_since_reset` and `next_margin` for the selected definition; unknown def 404 |
+| `/evaluations/{eval_id}` | `EvaluationDetail` | evaluations.result_json | also `proxy_detail`, `prohibited_features_used`, `best_known` and `versions` as the harness stored them, fairness `n` and mean PD per group (group sizes are not stored) |
+| `/fairness?[def]` | `FairnessData` (unknown def 404) | evaluations (fairness), ops.proxy_scan, config protected_classes/thresholds, experiments.reports (kind=compliance) | |
 | `/feed` | `FeedData` | ops.data_version, ops.vintage_curves, ops.label_stats | live = false until the servicing feed exists |
-| `/catalog?[def]` | `CatalogData` | curated.data_catalog, curated.field_lineage | |
+| `/catalog?[def]` | `CatalogData` (unknown def 404) | curated.data_catalog, curated.field_lineage | |
 | `/catalog/{variable}?[def]` | `CatalogVariable` | same | |
 | `/cashflow/cohorts` | `CashflowCohorts` | ops.cashflow_cohorts | |
 | `/features` | `FeatureRow[]` | feature_registry.features, feature_performance, evaluations (usage via model features) | |
@@ -80,15 +80,15 @@ unknown ones, 403 for actions while disabled, all as `{"detail": "..."}`. Respon
 | `/reports/{report_id}` | `Report` | experiments.reports | body is agent-written markdown (render sanitized) |
 | `/lessons` | `LessonsData` | LESSONS.md (lau.agents.lessons.read_lessons) | |
 | `/approvals` | `ApprovalsData` | evaluations, experiments.reports, gate_results, approvals, definition_approvals, model_registry | pending = candidates **of the active definition** that passed validation, have red-team and compliance reports, and no decision yet; plus a definition_change item when config/default_definition.yaml differs from the active definition |
-| `/approvals/{candidate_ref}` | `EvidencePacket` | evaluations, benchmark_results, gate_results, reports, cycles, approvals | `beats_best_known` from benchmark_results |
+| `/approvals/{candidate_ref}` | `EvidencePacket` | evaluations, benchmark_results, gate_results, reports, cycles, approvals, production.promotions | `beats_best_known` from benchmark_results; also the recorded `decision`, the `promotion` and the definition's `holdout` budget; model names resolve to the registry mirror's (full Unity Catalog) names |
 | POST `/approvals/{candidate_ref}/gate` | `ActionResult` | runs lau.harness.gate.promotion_gate | actions only; uses the holdout budget |
 | POST `/approvals/{candidate_ref}/decision` `{decision: "approve"\|"reject", rationale}` | `ActionResult` | lau.promotion.promote.record_approval | actions only; requires a gate result |
 | POST `/approvals/{candidate_ref}/promote` | `ActionResult` | lau.promotion.promote.promote | actions only |
 | `/rollouts` | `RolloutsData` | production.promotions | live stages Unavailable until the decision endpoint exists |
 | `/shadow` | `ShadowData` | ops.shadow_scores | available=false with reason if never run |
-| `/alerts` | `AlertsData` | ops.alerts, ops.alert_acks, ops.monitoring_runs | an alert is open when the latest monitoring run raised it and nobody acknowledged it (status bar count) |
+| `/alerts` | `AlertsData` | ops.alerts, ops.alert_acks, ops.monitoring_runs | each alert carries a plain `title`, `current` (raised by the latest monitoring run) and `ack_at`/`ack_note`; open = current and not acknowledged (the status bar count) |
 | POST `/alerts/{alert_id}/ack` `{note}` | `ActionResult` | writes ops.alert_acks (harness store) | actions only |
-| `/cost` | `CostData` | ops.cost_log, agent_trace (cost by agent), config project/budgets | billing_available=false unless system.billing readable |
+| `/cost` | `CostData` | ops.cost_log, agent_trace (cost by agent), config project/budgets | billing_available=false unless system.billing readable; `by_agent` leaves out a running cycle (its cost is logged when it ends) so it matches the cost log |
 | `/settings` | `SettingsData` | config/*.yaml, ops.config_versions, ops.access_checks | |
 | `/search?q` | `SearchResult[]` | model_registry, cycles, feature_registry.features, data_catalog, reports, definition_versions | max 30 |
 | POST `/ask` `{question}` | `AskResponse` | a read-only Claude agent (`lau.console.ask`, role `ask`, prompt `agents/prompts/ask.md`) with `describe_tables` and `sql_query` over the ui role; row-level `ops.shadow_scores` only through aggregates | 400 empty question; 503 without ANTHROPIC_API_KEY; 429 at the monthly hard stop; one question at a time; traced to ops.agent_trace and costed in ops.cost_log |

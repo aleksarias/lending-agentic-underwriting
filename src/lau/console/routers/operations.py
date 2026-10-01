@@ -67,7 +67,7 @@ def alerts() -> dict:
     return {
         "available": True,
         "reason": None,
-        "alerts": [{k: v for k, v in a.items() if k != "current"} for a in items],
+        "alerts": items,
         "monitoring_runs": [{k: v for k, v in r.items() if k != "summary"} for r in runs],
     }
 

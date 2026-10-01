@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b --pretty",
-    "check": "tsc -p tsconfig.json --pretty",
+    "check": "tsc -p tsconfig.json",
     "preview": "vite preview"
   },
   "dependencies": {

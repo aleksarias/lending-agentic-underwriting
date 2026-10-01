@@ -1,0 +1,7 @@
+/* Variable detail screen. Class names are prefixed with "variable-". Colors come only from tokens. */
+
+.variable-risks { display: grid; gap: var(--gap); grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); align-items: start; }
+.variable-risk { display: grid; gap: 8px; min-width: 0; }
+.variable-risk .head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; }
+.variable-risk .head strong { font-size: var(--fs-md); }
+.variable-risk p { margin: 0; font-size: var(--fs-sm); }

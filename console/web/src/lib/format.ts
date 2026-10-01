@@ -30,11 +30,21 @@ export const fmtSeconds = (v: number | null | undefined) => {
   return `${m} min ${Math.round(v % 60)} s`;
 };
 
-export const fmtDateTime = (iso: string | null | undefined) => {
+/** "Sep 30, 2026, 05:45 PM UTC"; pass { seconds: true } where instants closer than a minute matter. */
+export const fmtDateTime = (iso: string | null | undefined, opts: { seconds?: boolean } = {}) => {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC", timeZoneName: "short" });
+  return d.toLocaleString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    ...(opts.seconds ? { second: "2-digit" } : {}),
+    timeZone: "UTC",
+    timeZoneName: "short",
+  });
 };
 
 export const fmtDate = (iso: string | null | undefined) => {

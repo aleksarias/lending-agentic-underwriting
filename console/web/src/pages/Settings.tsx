@@ -1,11 +1,12 @@
-import { EmptyState, Page, PageHeader } from "../components/ui";
+/**
+ * Screen 20 — Reports and settings. Read-only configuration (thresholds, budgets, models, protected classes),
+ * benchmark definitions, config versions and access checks. Changes go through git and the CLI and are versioned.
+ */
+import { useSettings } from "../api/hooks";
+import { SettingsView } from "../components/Settings/SettingsView";
+import { ErrorState, Loading, Page } from "../components/ui";
 
-/** STUB — being implemented (see docs/console/contract.md and docs/console/design-intent.md). */
 export default function Settings() {
-  return (
-    <Page>
-      <PageHeader eyebrow="Decide and operate" title="Reports and settings" />
-      <EmptyState title="This screen is being built" />
-    </Page>
-  );
+  const q = useSettings();
+  return <Page>{q.isError ? <ErrorState error={q.error} /> : !q.data ? <Loading height={360} /> : <SettingsView s={q.data} />}</Page>;
 }

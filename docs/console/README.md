@@ -35,8 +35,10 @@ flowchart LR
   never calls MLflow and never computes a metric itself.
 - **Backend.** `src/lau/console/`: `services/` derive screen data from tables; `routers/` map one module per screen
   group to the contract; `util.py` handles safe reads, JSON conversion (never NaN) and a short TTL cache.
-- **Front end.** `console/web/`: React 19, TypeScript, Vite, TanStack Query, Recharts. `src/api/types.ts` is the
-  contract; pages use only the hooks in `src/api/hooks.ts`.
+- **Front end.** `console/web/`: React 19, TypeScript, Vite, TanStack Query, Recharts. All twenty screens of the
+  design (30 routes) plus the Ask drawer. `src/api/types.ts` is the contract; pages use only the hooks in
+  `src/api/hooks.ts`; each screen's components live in `src/components/<Screen>/`. Every route was checked on the
+  real-data fixture at desktop width and at 400 px (no page-level horizontal scroll, no console errors).
 - **Ask.** `POST /api/ask` runs a read-only Claude agent (`lau.console.ask`) with two tools, `describe_tables` and
   `sql_query`, both over the ui role. It gets the same isolation as the cycle agents: no built-in tools, dontAsk
   permissions, a scrubbed environment, and caps of $0.25, 8 turns and 3 minutes. Row-level shadow scores are readable

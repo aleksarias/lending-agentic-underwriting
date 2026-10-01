@@ -9,7 +9,7 @@ from __future__ import annotations
 from lau.console import deps
 from lau.console.services import benchmark, config, evals, ledger, models, ops, reports
 from lau.console.services import definitions as defs
-from lau.console.util import iso, now_utc, num
+from lau.console.util import boolean, iso, now_utc, num, text
 
 VERDICT_TONE = {"pass": "good", "ok": "good", "concern": "warn", "fail": "crit", "block": "crit"}
 
@@ -152,10 +152,28 @@ def evidence_packet(candidate_ref: str) -> dict | None:
         "reports": reports.for_candidate(candidate_ref),
         "fairness_min_air": num(fairness.get("min_air")),
         "cost_usd": ops.cycle_cost_usd(tags.get("cycle_id")),
+        "decision": evals.approval_record(approval) if approval else None,
+        "promotion": _promotion(promoted),
+        "holdout": {"used": used, "budget": budget},
         "can_run_gate": enabled and ready_for_gate,
         "can_decide": enabled and gate_ok and not decided_on_gate and not promoted,
         "can_promote": enabled and approved and not promoted,
         "blockers": blockers,
+    }
+
+
+def _promotion(r: dict | None) -> dict | None:
+    if not r:
+        return None
+    return {
+        "promotion_id": str(r["promotion_id"]),
+        "ts": iso(r["ts"]),
+        "definition_version": str(r["definition_version"]),
+        "production_model_version": str(r["production_model_version"]),
+        "candidate_model_version": str(r["candidate_model_version"]),
+        "previous_champion_version": text(r.get("previous_champion_version")),
+        "serving": bool(boolean(r.get("serving"))),
+        "approval_id": str(r.get("approval_id") or ""),
     }
 
 

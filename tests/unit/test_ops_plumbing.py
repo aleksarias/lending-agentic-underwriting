@@ -796,3 +796,35 @@ def test_teardown_blanks_credentials_of_every_service_principal_role(lake):
     assert sp_roles(s) == ["harness", "agent", "promoter", "ui"]  # configured SP roles; admin is the human
     state = WorkspaceState(service_principals={"ui": {"id": "1"}, "legacy": {"id": "2"}})
     assert sp_roles(s, state) == ["harness", "agent", "promoter", "ui", "legacy"]
+
+
+def test_liveness_writes_heartbeats_while_an_agent_runs(lake):
+    """A long agent run keeps beating (and flushing its trace), so a silent death is visible in the console."""
+    import asyncio
+
+    from lau.agents import orchestrator as orch
+    from lau.agents.runner import CycleContext
+    from lau.store import get_store
+    from lau.trace import TraceWriter
+
+    cid = "cy-test-liveness"
+    ctx = CycleContext(cid, lake["version"], TraceWriter(cid, lake["version"]))
+    ctx.trace.log("modeling", "list_features", {}, {"n": 3}, state_changing=False)
+
+    async def long_run() -> None:
+        done = asyncio.Event()
+        beat = asyncio.create_task(orch._liveness(ctx, "modeling", done, log=lambda m: None, every_s=0.05))
+        await asyncio.sleep(0.4)
+        done.set()
+        await beat
+
+    asyncio.run(long_run())
+    st = get_store("admin")
+    try:
+        beats = st.query(f"SELECT state FROM {st.fq('ops', 'cycle_heartbeat')} WHERE cycle_id = '{cid}'")
+        trace = st.query(f"SELECT action FROM {st.fq('ops', 'agent_trace')} WHERE cycle_id = '{cid}'")
+        assert len(beats) >= 2 and set(beats["state"]) == {"running"}
+        assert list(trace["action"]) == ["list_features"]  # flushed mid-run, exactly once
+    finally:
+        for table in ("cycle_heartbeat", "agent_trace"):
+            st.execute(f"DELETE FROM {st.fq('ops', table)} WHERE cycle_id = '{cid}'")

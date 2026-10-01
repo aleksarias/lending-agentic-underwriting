@@ -26,6 +26,7 @@ def activity() -> dict:
         live = {
             "cycle_id": cid,
             "definition_version": str(run["definition_version"]),
+            "reason": str(run.get("reason") or ""),
             "started_at": iso(run["started_at"]),
             "state": "stopping" if stopping else "running",
             "current_step": beat.get("step"),

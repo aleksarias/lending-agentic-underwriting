@@ -120,7 +120,7 @@ def _data_events() -> list[dict]:
                 "data_loaded",
                 r["created_at"],
                 f"Data version {short(str(r['data_version']))} loaded",
-                str(r["data_version"]),
+                f"{r['data_version']}:{iso(r['created_at'])}",  # the same version can be loaded more than once
                 detail=(
                     f"{int(n):,} applications, performance through {r.get('as_of_month')}"
                     if num(n) is not None
@@ -425,7 +425,32 @@ def all_events() -> list[dict]:
     for b in builders:
         out.extend(e for e in b() if e is not None)
     out.sort(key=lambda e: (e["_ts"], e["id"]), reverse=True)
+    seen: dict[str, int] = {}
+    for e in out:  # ids are the pagination cursor's tie-breaker, so they must be unique
+        n = seen.get(e["id"], 0)
+        seen[e["id"]] = n + 1
+        if n:
+            e["id"] = f"{e['id']}#{n + 1}"
     return out
+
+
+CURSOR_SEP = "~"
+
+
+def cursor_of(e: dict) -> str:
+    """Opaque pagination cursor: the event's timestamp and id (events sort by both, newest first)."""
+    return f"{e['ts']}{CURSOR_SEP}{e['id']}"
+
+
+def parse_cursor(before: str | None) -> tuple[pd.Timestamp, str | None] | None:
+    """A cursor from `cursor_of`, or a bare ISO timestamp (then strictly older than that instant)."""
+    from lau.console.util import parse_ts
+
+    if not before:
+        return None
+    ts_text, _, ident = before.partition(CURSOR_SEP)
+    ts = parse_ts(ts_text)
+    return None if ts is None else (ts, ident or None)
 
 
 def public(e: dict) -> dict:
@@ -435,7 +460,7 @@ def public(e: dict) -> dict:
 def page(
     types: list[str] | None = None,
     definition: str | None = None,
-    before: pd.Timestamp | None = None,
+    before: str | None = None,
     limit: int = 100,
     exclude_quiet: bool = False,
 ) -> dict:
@@ -446,11 +471,16 @@ def page(
         items = [e for e in items if e["type"] not in QUIET_TYPES]
     if definition:
         items = [e for e in items if e.get("definition_version") in (None, definition)]
-    if before is not None:
-        items = [e for e in items if e["_ts"] < before]
+    cursor = parse_cursor(before)
+    if cursor is not None:
+        ts, ident = cursor
+        if ident is None:
+            items = [e for e in items if e["_ts"] < ts]
+        else:  # strictly after the cursor in (timestamp, id) descending order: ties at the boundary are kept
+            items = [e for e in items if e["_ts"] < ts or (e["_ts"] == ts and e["id"] < ident)]
     chunk = items[: max(1, min(limit, 500))]
     more = len(items) > len(chunk)
-    return {"events": [public(e) for e in chunk], "next_before": chunk[-1]["ts"] if more and chunk else None}
+    return {"events": [public(e) for e in chunk], "next_before": cursor_of(chunk[-1]) if more and chunk else None}
 
 
 def between(start: pd.Timestamp, end: pd.Timestamp, limit: int = 300) -> list[dict]:

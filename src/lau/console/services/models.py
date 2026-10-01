@@ -32,7 +32,23 @@ _REG_COLS = [
 
 
 def names() -> tuple[str, str]:
-    """(candidate model name, production model name) exactly as stored in the registry and in model routes."""
+    """(candidate model name, production model name) exactly as stored in the registry and in model routes.
+
+    The registry mirror is the reference: a local console over tables exported from Databricks sees the full Unity
+    Catalog names there, while the local settings would give the short names.
+    """
+    cand, prod = _configured_names()
+    stored = set(registry()["model_name"]) if len(registry()) else set()
+
+    def match(configured: str) -> str:
+        short_name = configured.rsplit(".", 1)[-1]
+        hits = sorted(n for n in stored if n == configured or n.rsplit(".", 1)[-1] == short_name)
+        return hits[0] if len(hits) == 1 else configured
+
+    return match(cand), match(prod)
+
+
+def _configured_names() -> tuple[str, str]:
     try:
         from lau.modeling import registry_io
 

@@ -96,7 +96,7 @@ def _proxy_heatmap(version: str) -> list[dict]:
 
 @router.get("/fairness")
 def fairness(version: str | None = DEF_PARAM) -> dict:
-    v = (defs.resolve_version(version) if version else None) or defs.active_version() or ""
+    v = defs.resolve_or_404(version)
     th = config.thresholds().get("fairness", {})
     prot = config.protected()
     findings = [m for m in reports.list_meta(kind="compliance") if m["definition_version"] in ("", v)]

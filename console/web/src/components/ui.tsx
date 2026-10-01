@@ -2,7 +2,7 @@
  * Shared UI building blocks. Pages compose these; do not re-implement them per page.
  * Styling lives in styles/app.css (class names below).
  */
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import type { ApiError } from "../api/client";
 import type { BadgeSpec, DefinitionRef, ModelRef, Tile as TileT, Tone, Unavailable } from "../api/types";
@@ -124,7 +124,7 @@ export function DefinitionBadge({ def, version, to }: { def?: DefinitionRef | nu
   );
   const href = to ?? (v ? `/definitions/${v}` : undefined);
   return href ? (
-    <Link className="badge" to={href} title="Definition of default">
+    <Link className="badge" to={href} title="Definition of default" aria-label={`Definition of default ${shortVersion(v)}${label ? `, ${label}` : ""}`}>
       {body}
     </Link>
   ) : (
@@ -216,11 +216,32 @@ export function QueryView<T>({ query, children, loadingHeight }: { query: { data
   return <>{children(query.data)}</>;
 }
 
-export function Tabs<K extends string>({ tabs, value, onChange }: { tabs: { key: K; label: ReactNode }[]; value: K; onChange: (k: K) => void }) {
+/** Tab strip: one tab in the Tab order (the selected one); arrow keys, Home and End move between tabs. */
+export function Tabs<K extends string>({ tabs, value, onChange, panelId, label }: { tabs: { key: K; label: ReactNode }[]; value: K; onChange: (k: K) => void; panelId?: string; label?: string }) {
+  const onKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const i = tabs.findIndex((t) => t.key === value);
+    const next = e.key === "ArrowRight" ? i + 1 : e.key === "ArrowLeft" ? i - 1 : e.key === "Home" ? 0 : e.key === "End" ? tabs.length - 1 : null;
+    if (next === null || !tabs.length) return;
+    e.preventDefault();
+    const k = tabs[(next + tabs.length) % tabs.length].key;
+    onChange(k);
+    const el = e.currentTarget.querySelector<HTMLButtonElement>(`[data-tab="${k}"]`);
+    el?.focus();
+  };
   return (
-    <div className="tabs" role="tablist">
+    <div className="tabs" role="tablist" aria-label={label} onKeyDown={onKey}>
       {tabs.map((t) => (
-        <button key={t.key} role="tab" aria-selected={value === t.key} className={value === t.key ? "active" : ""} onClick={() => onChange(t.key)} type="button">
+        <button
+          key={t.key}
+          data-tab={t.key}
+          role="tab"
+          aria-selected={value === t.key}
+          aria-controls={panelId}
+          tabIndex={value === t.key ? 0 : -1}
+          className={value === t.key ? "active" : ""}
+          onClick={() => onChange(t.key)}
+          type="button"
+        >
           {t.label}
         </button>
       ))}
@@ -266,18 +287,39 @@ export function DataTable<R>(props: { rows: R[]; columns: Column<R>[]; rowKey: (
               <th
                 key={c.key}
                 className={[c.align === "right" ? "r" : "", c.sort ? "sortable" : ""].join(" ")}
-                onClick={c.sort ? () => setSort((s) => (s?.key === c.key ? { key: c.key, dir: s.dir === "asc" ? "desc" : "asc" } : { key: c.key, dir: "desc" })) : undefined}
                 aria-sort={sort?.key === c.key ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}
               >
-                {c.header}
-                {sort?.key === c.key ? (sort.dir === "asc" ? " ▲" : " ▼") : ""}
+                {c.sort ? (
+                  <button
+                    type="button"
+                    className="th-sort"
+                    onClick={() => setSort((s) => (s?.key === c.key ? { key: c.key, dir: s.dir === "asc" ? "desc" : "asc" } : { key: c.key, dir: "desc" }))}
+                  >
+                    {c.header}
+                    <span aria-hidden>{sort?.key === c.key ? (sort.dir === "asc" ? " ▲" : " ▼") : ""}</span>
+                  </button>
+                ) : (
+                  c.header
+                )}
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={props.rowKey(r)} className={props.onRowClick ? "clickable" : undefined} onClick={props.onRowClick ? () => props.onRowClick!(r) : undefined}>
+            <tr
+              key={props.rowKey(r)}
+              className={props.onRowClick ? "clickable" : undefined}
+              onClick={
+                props.onRowClick
+                  ? (e) => {
+                      // a link or control inside the row does its own thing
+                      if ((e.target as HTMLElement).closest("a,button,input,select,textarea,label,summary")) return;
+                      props.onRowClick!(r);
+                    }
+                  : undefined
+              }
+            >
               {props.columns.map((c) => (
                 <td key={c.key} className={[c.align === "right" ? "r" : "", c.className?.(r) ?? ""].join(" ")}>
                   {c.render(r)}
@@ -292,7 +334,7 @@ export function DataTable<R>(props: { rows: R[]; columns: Column<R>[]; rowKey: (
 }
 
 /** Horizontal meter for "used vs cap" budgets. */
-export function Meter({ used, cap, label, unit = "" }: { used: number; cap: number; label: string; unit?: string }) {
+export function Meter({ used, cap, label, unit = "", format }: { used: number; cap: number; label: string; unit?: string; format?: (v: number) => string }) {
   const pct = cap > 0 ? Math.min(100, (used / cap) * 100) : 0;
   const tone = pct >= 90 ? "crit" : pct >= 75 ? "warn" : "";
   return (
@@ -300,9 +342,7 @@ export function Meter({ used, cap, label, unit = "" }: { used: number; cap: numb
       <div className="row between small">
         <span>{label}</span>
         <span className="num muted">
-          {used.toLocaleString("en-US", { maximumFractionDigits: 2 })}
-          {unit} of {cap.toLocaleString("en-US", { maximumFractionDigits: 2 })}
-          {unit}
+          {format ? `${format(used)} of ${format(cap)}` : `${used.toLocaleString("en-US", { maximumFractionDigits: 2 })}${unit} of ${cap.toLocaleString("en-US", { maximumFractionDigits: 2 })}${unit}`}
         </span>
       </div>
       <div className="bar-track" role="meter" aria-valuenow={used} aria-valuemin={0} aria-valuemax={cap} aria-label={label}>
@@ -312,7 +352,10 @@ export function Meter({ used, cap, label, unit = "" }: { used: number; cap: numb
   );
 }
 
-/** In-page confirmation dialog (browser confirm() is not used). */
+/**
+ * In-page confirmation dialog (browser confirm() is not used). Modal: focus moves into it (the text box when one is
+ * required, else Cancel), Tab stays inside, Escape cancels, and focus returns to the opener when it closes.
+ */
 export function ConfirmDialog(props: {
   open: boolean;
   title: string;
@@ -325,11 +368,44 @@ export function ConfirmDialog(props: {
   onCancel: () => void;
 }) {
   const [text, setText] = useState("");
+  const box = useRef<HTMLDivElement>(null);
+  const { open, busy, onCancel } = props;
+  useEffect(() => {
+    if (open) setText(""); // a reopened dialog never carries the previous rationale
+  }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    const opener = document.activeElement as HTMLElement | null;
+    const first = box.current?.querySelector<HTMLElement>("textarea, button");
+    first?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !busy) {
+        e.preventDefault();
+        onCancel();
+      } else if (e.key === "Tab" && box.current) {
+        const items = Array.from(box.current.querySelectorAll<HTMLElement>("textarea, button:not([disabled]), a[href], input, select"));
+        if (!items.length) return;
+        const [head, tail] = [items[0], items[items.length - 1]];
+        if (e.shiftKey && document.activeElement === head) {
+          e.preventDefault();
+          tail.focus();
+        } else if (!e.shiftKey && document.activeElement === tail) {
+          e.preventDefault();
+          head.focus();
+        }
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      opener?.focus?.();
+    };
+  }, [open, busy, onCancel]);
   if (!props.open) return null;
   const ok = !props.requireText || text.trim().length >= props.requireText.minLength;
   return (
     <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-label={props.title}>
-      <div className="dialog">
+      <div className="dialog" ref={box}>
         <h3>{props.title}</h3>
         <div className="small">{props.children}</div>
         {props.requireText && (

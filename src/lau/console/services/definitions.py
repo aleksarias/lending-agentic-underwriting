@@ -147,6 +147,18 @@ def resolve_version(version: str | None) -> str | None:
     return hits[0] if len(hits) == 1 else None
 
 
+def resolve_or_404(version: str | None) -> str:
+    """The requested definition (exact or unique prefix), the active one when none is given; 404 when unknown."""
+    from fastapi import HTTPException
+
+    if version:
+        resolved = resolve_version(version)
+        if resolved is None:
+            raise HTTPException(status_code=404, detail="unknown definition version")
+        return resolved
+    return active_version() or ""
+
+
 def definition_ref(version: str | None) -> dict | None:
     if not version:
         return None
@@ -258,10 +270,15 @@ def definition_version_payload(version: str) -> dict | None:
     active_to = None
     if found and found[0] + 1 < len(data["history"]):
         active_to = iso(data["history"][found[0] + 1]["activated_at"])
+    ref = definition_ref(version) or {}
     return {
         "version": version,
         "short": short(version),
         "name": v["name"],
+        "summary": ref.get("summary", ""),
+        "dpd": ref.get("dpd", 0),
+        "timing": ref.get("timing", "ever"),
+        "window_months": ref.get("window_months", 0),
         "description": v["description"],
         "plain_language": plain_language(v["fields"]),
         "fields": v["fields"],

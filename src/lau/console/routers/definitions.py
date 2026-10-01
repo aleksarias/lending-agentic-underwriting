@@ -38,5 +38,5 @@ def definition(version: str) -> dict:
 
 @router.get("/pipeline")
 def pipeline(version: str | None = DEF_PARAM) -> dict:
-    v = defs.resolve_version(version) if version else defs.active_version()
+    v = defs.resolve_or_404(version) or None
     return {"definition_version": v, "stages": ops.freshness(v), "runs": ops.pipeline_runs(v)}

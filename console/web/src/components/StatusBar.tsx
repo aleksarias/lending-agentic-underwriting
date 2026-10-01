@@ -136,7 +136,9 @@ export function StatusBar({ onMenu, onAsk }: { onMenu: () => void; onAsk: () => 
           )}
           {s.alerts_open.high + s.alerts_open.medium > 0 && (
             <Link to="/alerts">
-              <Pill tone={s.alerts_open.high ? "crit" : "warn"}>{s.alerts_open.high + s.alerts_open.medium} alerts</Pill>
+              <Pill tone={s.alerts_open.high ? "crit" : "warn"}>
+                {s.alerts_open.high + s.alerts_open.medium} {s.alerts_open.high + s.alerts_open.medium === 1 ? "alert" : "alerts"}
+              </Pill>
             </Link>
           )}
           <Pill tone={s.environment === "prod" ? "crit" : "neutral"}>

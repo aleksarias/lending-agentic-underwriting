@@ -45,27 +45,45 @@ def _maturation(version: str | None) -> dict | None:
     }
 
 
-def _backlog(plan: dict | None, plan_cycle: str | None) -> list[dict]:
+def _backlog(active: str | None) -> list[dict]:
+    """Open research questions: proposed features no model has used yet, and lessons carried over from an earlier
+    definition that have not been re-verified under the active one. (The latest plan already ran; it is shown as
+    the plan, not as backlog.)"""
+    from lau.agents.lessons import read_lessons
+    from lau.console.routers.features import _usage
+
     items: list[dict] = []
-    for key in ("next_hypotheses", "hypotheses", "backlog", "goals"):
-        for h in (plan or {}).get(key) or []:
-            textual = h if isinstance(h, str) else (h.get("hypothesis") or h.get("goal") or h.get("text"))
-            if textual:
-                items.append({"hypothesis": str(textual)[:400], "source": f"planner ({plan_cycle})"})
+    used = set(_usage())
     feats = read_table(
         deps.ui_store(),
         "feature_registry",
         "features",
-        columns=["name", "hypothesis", "status", "cycle_id"],
-        where="status = 'proposed'",
-        limit=50,
+        columns=["name", "hypothesis", "status", "cycle_id", "created_at"],
+        ts=["created_at"],
     )
-    for r in feats.to_dict("records") if len(feats) else []:
-        if text(r.get("hypothesis")):
+    if len(feats):
+        feats = feats.sort_values("created_at", ascending=False).drop_duplicates("name")
+        for r in feats.to_dict("records"):
+            if r["name"] in used or str(r.get("status")) not in ("proposed", "screened", "accepted"):
+                continue
+            hypothesis = text(r.get("hypothesis")) or "no hypothesis recorded"
             items.append(
-                {"hypothesis": f"{r['name']}: {r['hypothesis']}"[:400], "source": f"feature proposal ({r['cycle_id']})"}
+                {
+                    "hypothesis": f"{r['name']}: {hypothesis}"[:400],  # "name: hypothesis" (the page links the name)
+                    "source": f"feature proposal ({r['cycle_id']})",
+                }
             )
-    return items[:40]
+    if active:
+        pending = f"unverified-under-{active[:8]}"
+        for lesson in read_lessons():
+            if lesson.status == pending:
+                items.append(
+                    {
+                        "hypothesis": f"Re-verify under the active definition: {lesson.text}"[:400],
+                        "source": f"lesson {lesson.id}",
+                    }
+                )
+    return items[:60]
 
 
 @router.get("/upcoming")
@@ -78,6 +96,7 @@ def upcoming() -> dict:
         "jobs": ops.declared_jobs(),
         "queue": ops.queue(),
         "next_plan": plan,
+        "next_plan_cycle_id": plan_cycle,
         "waiting": approvals.waiting_items(),
         "forecast": {
             "month_end_usd": _month_end_usd(),
@@ -86,5 +105,5 @@ def upcoming() -> dict:
             "holdout_remaining": max(0, budget - used),
             "maturation": _maturation(active),
         },
-        "backlog": _backlog(plan, plan_cycle),
+        "backlog": _backlog(active),
     }

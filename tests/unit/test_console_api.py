@@ -214,6 +214,7 @@ def test_detail_endpoints_resolve_from_their_lists(client):
     assert all({"from", "to"} <= set(e) for e in lineage["edges"])
     d = _get(client, "/definitions")[0]
     assert _get(client, f"/definitions/{d['short']}")["version"] == d["version"]  # short prefixes resolve
+    assert {"summary", "dpd", "timing", "window_months"} <= set(d)
     evaluations = _get(client, "/performance")["evaluations"]
     assert evaluations
     detail = _get(client, f"/evaluations/{evaluations[0]['eval_id']}")
@@ -253,19 +254,30 @@ def test_progress_reads_the_benchmark_ledger(client):
 def test_events_are_typed_sorted_and_paginate(client):
     from lau.console.services.events import EVENT_TYPES
 
-    page = _get(client, "/events", limit=5)
-    stamps = [e["ts"] for e in page["events"]]
+    everything = _get(client, "/events", limit=500)["events"]
+    ids = [e["id"] for e in everything]
+    assert len(ids) == len(set(ids))  # ids are unique: they break timestamp ties in the cursor
+    stamps = [e["ts"] for e in everything]
     assert stamps == sorted(stamps, reverse=True)
-    assert all(e["type"] in EVENT_TYPES for e in page["events"])
-    if page["next_before"]:
-        older = _get(client, "/events", limit=5, before=page["next_before"])
-        assert all(e["ts"] < page["next_before"] for e in older["events"])
+    assert all(e["type"] in EVENT_TYPES for e in everything)
+    # walking the pages with the cursor returns every event exactly once, even when timestamps tie at a boundary
+    walked, before = [], None
+    while True:
+        page = _get(client, "/events", limit=3, **({"before": before} if before else {}))
+        walked += [e["id"] for e in page["events"]]
+        before = page["next_before"]
+        if not before:
+            break
+    assert walked == ids
     only = _get(client, "/events", types="evaluation")
     assert {e["type"] for e in only["events"]} <= {"evaluation"}
+    assert client.get("/api/events", params={"definition": "zzzzzzzz"}).status_code == 404
+    assert client.get("/api/events", params={"before": "not a time"}).status_code == 400
 
 
 def test_alert_ids_follow_the_contract(client):
     a = _get(client, "/alerts")["alerts"][0]
+    assert {"current", "title", "ack_at", "ack_note"} <= set(a) and a["current"] is True
     want = hashlib.sha256(f"{pd.Timestamp(a['ts']).isoformat()}|{a['kind']}|{a['subject']}".encode()).hexdigest()
     assert a["id"] == want[:12]
 
@@ -321,6 +333,16 @@ def test_ask_needs_a_key_and_row_level_scores_stay_aggregate(client, monkeypatch
     with pytest.raises(PermissionError):
         check_aggregate_only("SELECT application_id, pd FROM lending_uw_dev.ops.shadow_scores")
     check_aggregate_only("SELECT role, avg(pd) AS mean_pd FROM lending_uw_dev.ops.shadow_scores GROUP BY role")
+
+
+def test_evidence_packet_uses_registry_names_and_reports_budget(client):
+    ev = _get(client, "/performance")["evaluations"]
+    ref = ev[0]["candidate_ref"]  # the test lake has baseline evaluations only (no cycles run)
+    packet = _get(client, f"/approvals/{quote(ref, safe='')}")
+    names = {m["model"]["name"] for m in _get(client, "/models")}
+    assert packet["model"]["name"] in names  # links to /models/<name>/<version> resolve
+    assert {"decision", "promotion", "holdout"} <= set(packet)
+    assert packet["holdout"]["budget"] >= packet["holdout"]["used"] >= 0
 
 
 def test_search_links_to_console_routes(client):

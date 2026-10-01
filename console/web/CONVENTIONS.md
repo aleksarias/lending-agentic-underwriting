@@ -16,6 +16,12 @@ Read this before building a screen. The console must read as one product, not a 
   `StageList` (pipeline freshness), `WaitingList` (decisions waiting on people). Use them wherever those appear.
 - Interval text and tone: `fmtInterval(i)` gives "+0.103, 95% CI +0.077 to +0.129"; `intervalTone(i)` gives good when
   the whole interval is above zero, crit below, warn when it straddles zero (no difference established).
+- Shared behaviour you get for free: `DataTable` sort headers are buttons (keyboard operable) and a click on a link or
+  control inside a clickable row does not trigger the row; `Tabs` move with arrow keys, Home and End (pass `panelId`
+  and `label`); `ConfirmDialog` traps focus, closes on Escape, restores focus and starts empty each time; `Meter`
+  takes `format` (e.g. `fmtUsd`); `EventList` takes `absoluteTime`; `fmtDateTime(iso, { seconds: true })`;
+  `IntervalChart` draws at its container's width so labels stay readable on a phone. The query client does not retry
+  4xx responses, so not-found states appear at once.
 
 ## Page anatomy (every screen)
 1. `<PageHeader eyebrow=<nav group> title=… summary=… />` — the summary is ONE plain-language sentence computed from the data that answers the screen's question ("4 of 7 candidates passed; the best known model is v7.").

@@ -25,7 +25,11 @@ def events_page(
 ) -> dict:
     wanted = [t for t in (types or "").split(",") if t in events.EVENT_TYPES]
     version = defs.resolve_version(definition) if definition else None
-    return events.page(wanted or None, version, parse_ts(before), limit)
+    if definition and version is None:
+        raise HTTPException(status_code=404, detail="unknown definition version")
+    if before and events.parse_cursor(before) is None:
+        raise HTTPException(status_code=400, detail="before must be a cursor from next_before or an ISO-8601 time")
+    return events.page(wanted or None, version, before, limit)
 
 
 def _vector(ts: pd.Timestamp) -> dict[str, tuple[str | None, str | None, str | None]]:

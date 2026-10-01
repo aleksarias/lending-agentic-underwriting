@@ -1,0 +1,20 @@
+/* Improvement cycle screen. Colors only through the design tokens; class names are prefixed with the screen name. */
+.cycle-detail-sub {
+  margin: 0 0 6px; font-family: var(--font-body); font-size: 12px; font-weight: 600; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--muted);
+}
+.cycle-detail-focus { margin: 0; max-width: 90ch; }
+.cycle-detail-list { margin: 0; padding-left: 22px; display: grid; gap: 6px; max-width: 100ch; }
+.cycle-detail-raw > summary { cursor: pointer; font-size: var(--fs-sm); color: var(--accent); margin-bottom: 8px; }
+.cycle-detail-toggle {
+  font: inherit; color: var(--accent); background: none; border: 0; cursor: pointer;
+  min-width: 28px; min-height: 28px; padding: 2px 6px; border-radius: 6px; font-size: 15px; line-height: 1;
+}
+.cycle-detail-toggle:hover { background: var(--surface-3); }
+.cycle-detail-chart { align-self: start; }
+.cycle-detail-trace td.cycle-detail-summary { min-width: 240px; overflow-wrap: anywhere; }
+.cycle-detail-expand > td { background: var(--surface-2); }
+.cycle-detail-payloads { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.cycle-detail-payload { min-width: 0; display: grid; gap: 6px; align-content: start; }
+/* A definition badge never wraps on its own; inside the narrow details grid it has to. */
+.cycle-detail-details .badge { white-space: normal; }

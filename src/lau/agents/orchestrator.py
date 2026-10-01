@@ -133,18 +133,37 @@ def _flush_trace(ctx: CycleContext, log=print) -> None:
         log(f"warning: trace flush failed ({type(e).__name__}: {e}); rows kept for the next flush")
 
 
+LIVENESS_EVERY_S = 60  # during a run: heartbeat + trace flush, so the console shows progress and a silent death
+
+
+async def _liveness(ctx: CycleContext, role: str, done: asyncio.Event, log=print, every_s: float = LIVENESS_EVERY_S):
+    """While an agent runs: a heartbeat and a trace flush every `every_s` seconds (off the event loop)."""
+    while not done.is_set():
+        try:
+            await asyncio.wait_for(done.wait(), timeout=every_s)
+        except TimeoutError:
+            await asyncio.to_thread(_heartbeat, ctx, role, "running", role, log)
+            await asyncio.to_thread(_flush_trace, ctx, log)
+
+
 async def _agent_run(role: str, prompt: str, tools: list, ctx: CycleContext, log=print):
-    """`run_agent` plus live visibility: stop check first, heartbeats around the run, trace flushed after it."""
+    """`run_agent` plus live visibility: stop check first, heartbeats around (and during) the run, trace flushed."""
     stop = _pending_stop(ctx, log)
     if stop is not None:
         raise stop
     _heartbeat(ctx, role, "running", role, log)
+    done = asyncio.Event()
+    beat = asyncio.create_task(_liveness(ctx, role, done, log))
     try:
         r = await run_agent(role, prompt, tools, ctx)
     except BaseException:  # noqa: BLE001 - recorded, then re-raised for run_cycle to classify
+        done.set()
+        await beat
         _heartbeat(ctx, role, "error", role, log)
         _flush_trace(ctx, log)
         raise
+    done.set()
+    await beat
     _heartbeat(ctx, role, "error" if r.is_error else "done", role, log)
     _flush_trace(ctx, log)
     return r

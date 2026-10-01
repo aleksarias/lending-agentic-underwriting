@@ -35,14 +35,15 @@ const EVENT_KIND: Partial<Record<EventType, "proposed" | "measured">> = {
   alert: "measured",
 };
 
-export function EventList({ events, showDefinition = true, empty }: { events: EventItem[]; showDefinition?: boolean; empty?: string }) {
+/** `absoluteTime` shows the exact UTC time instead of "5 h ago" (for change logs read by exact time). */
+export function EventList({ events, showDefinition = true, empty, absoluteTime = false }: { events: EventItem[]; showDefinition?: boolean; empty?: string; absoluteTime?: boolean }) {
   if (!events.length) return <EmptyState title={empty ?? "No events yet"}>Events appear as the pipeline, agents, harness and people act.</EmptyState>;
   return (
     <ol className="timeline">
       {events.map((e) => (
         <li key={e.id} className={`item ${e.tone}`}>
-          <div className="when small muted" title={fmtDateTime(e.ts)}>
-            <TimeAgo iso={e.ts} />
+          <div className="when small muted" title={fmtDateTime(e.ts, { seconds: true })}>
+            {absoluteTime ? fmtDateTime(e.ts) : <TimeAgo iso={e.ts} />}
           </div>
           <div className="what">
             <div className="row" style={{ gap: 6 }}>

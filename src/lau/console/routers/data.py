@@ -71,7 +71,7 @@ def _variable(r: dict) -> dict:
 
 
 def _version(version: str | None) -> str:
-    return (defs.resolve_version(version) if version else None) or defs.active_version() or ""
+    return defs.resolve_or_404(version)
 
 
 @router.get("/catalog")

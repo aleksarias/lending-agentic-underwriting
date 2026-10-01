@@ -16,7 +16,7 @@ router = api_router()
 
 @router.get("/performance")
 def performance(version: str | None = DEF_PARAM) -> dict:
-    v = (defs.resolve_version(version) if version else None) or defs.active_version() or ""
+    v = defs.resolve_or_404(version)
     ev = evals.evaluations()
     mine = ev[ev["definition_version"] == v] if len(ev) else ev
     ledger_rows = []
@@ -33,11 +33,18 @@ def performance(version: str | None = DEF_PARAM) -> dict:
                 "ts": s["ts"],
             }
         )
+    from lau.console import deps
+    from lau.console.services import config
+    from lau.harness import multiple_testing
+
+    since = multiple_testing.n_tests(deps.ui_store(), v) if v else 0
     gates = evals.gates()
     mine_gates = gates[gates["definition_version"] == v] if len(gates) else gates
     return {
         "definition_version": v,
         "definitions": defs.definition_refs(),
+        "tests_since_reset": since,
+        "next_margin": multiple_testing.required_margin(since + 1, config.thresholds().get("gate", {})) if v else None,
         "evaluations": evals.summaries(mine),
         "ledger": ledger_rows,
         "holdout": {

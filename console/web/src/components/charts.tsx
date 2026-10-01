@@ -3,7 +3,7 @@
  * light/dark theme. Every chart takes a `title` used as its accessible label; pages should also offer the numbers
  * in a table nearby (screen readers and exact values).
  */
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Bar,
   BarChart,
@@ -183,11 +183,20 @@ export function IntervalChart(props: {
 }) {
   const c = useChartColors();
   const fmt = props.format ?? ((v: number) => v.toFixed(3));
-  const W = 560;
+  // Drawn at the container's real width, so text stays 11-12px on a phone instead of scaling down.
+  const box = useRef<HTMLElement>(null);
+  const [W, setW] = useState(560);
+  useEffect(() => {
+    const el = box.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([entry]) => setW(Math.max(260, Math.round(entry.contentRect.width))));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const rowH = 34;
   const top = 18;
-  // room for the longest row label (about 7 units per character at 12px), within sensible bounds
-  const left = Math.min(240, Math.max(64, Math.max(0, ...props.rows.map((r) => r.label.length)) * 7 + 18));
+  // room for the longest row label (about 7px per character at 12px), at most 40% of the width
+  const left = Math.min(W * 0.4, 240, Math.max(64, Math.max(0, ...props.rows.map((r) => r.label.length)) * 7 + 18));
   const right = 20;
   const H = top + props.rows.length * rowH + 30;
   const vals = props.rows.flatMap((r) => [r.lo, r.hi, 0]);
@@ -203,7 +212,7 @@ export function IntervalChart(props: {
   const x = (v: number) => left + ((v - min) / (max - min)) * (W - left - right);
   const ticks = Array.from({ length: 5 }, (_, i) => min + ((max - min) * i) / 4);
   return (
-    <figure className="chart-box" style={{ margin: 0 }} aria-label={props.title} role="img">
+    <figure ref={box} className="chart-box" style={{ margin: 0 }} aria-label={props.title} role="img">
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: "block" }}>
         {ticks.map((t, i) => (
           <g key={i}>
