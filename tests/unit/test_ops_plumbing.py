@@ -910,3 +910,34 @@ def test_job_pins_match_the_locked_model_libraries():
     for lib in ("scikit-learn", "lightgbm", "xgboost"):
         pins = set(re.findall(rf'"{lib}==([^"]+)"', jobs))
         assert pins == {version(lib)}, f"{lib}: jobs.yml pins {pins or 'nothing'}, uv.lock has {version(lib)}"
+
+
+def test_switching_roles_never_reuses_another_roles_mlflow_client(monkeypatch):
+    """MLflow caches its Databricks client by host and profile only; each role switch must drop it, or the first
+    identity in a process would make every later call (a promoter registering a model ran as the harness)."""
+    import os
+    from types import SimpleNamespace
+
+    import mlflow.utils.rest_utils as rest
+
+    from lau import credentials
+
+    made: list[str] = []
+
+    def fake_client(*args, **kwargs):
+        made.append(os.environ.get("DATABRICKS_CLIENT_ID", ""))
+        return made[-1]
+
+    cached = rest.lru_cache(maxsize=5)(fake_client)
+    monkeypatch.setattr(rest, "get_workspace_client", cached)
+    roles = {"harness": "cid-harness", "promoter": "cid-promoter"}
+    monkeypatch.setattr(
+        credentials,
+        "databricks_config",
+        lambda role: SimpleNamespace(host="https://example", client_id=roles[role], client_secret="s", token=None),
+    )
+    monkeypatch.delenv("LAU_RUNTIME_ROLE", raising=False)
+    for role in ("harness", "promoter", "harness"):
+        with credentials.role_env(role):
+            assert rest.get_workspace_client(False, "https://example", None, None) == roles[role]
+    assert made == ["cid-harness", "cid-promoter", "cid-harness"]

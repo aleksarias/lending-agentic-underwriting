@@ -127,6 +127,18 @@ def write_env_values(updates: dict[str, str]) -> None:
     ENV_FILE.chmod(0o600)
 
 
+def _forget_mlflow_clients() -> None:
+    """MLflow caches its Databricks client by host, token and profile, not by the credentials in the environment, so
+    without this the first identity used in a process would silently serve every later role (e.g. harness writes
+    landing under the promoter's name, or a promoter write denied as the harness)."""
+    try:
+        from mlflow.utils.rest_utils import get_workspace_client
+
+        get_workspace_client.cache_clear()
+    except Exception:  # noqa: BLE001, S110 - an MLflow version without this cache needs nothing
+        pass
+
+
 @contextlib.contextmanager
 def role_env(role: str) -> Iterator[None]:
     """Temporarily expose ONE role's Databricks credentials via env vars (for MLflow, which reads env).
@@ -159,6 +171,7 @@ def role_env(role: str) -> Iterator[None]:
         else:
             os.environ["DATABRICKS_CLIENT_ID"] = cfg.client_id
             os.environ["DATABRICKS_CLIENT_SECRET"] = cfg.client_secret
+        _forget_mlflow_clients()  # MLflow must build its client from THIS role's credentials
         yield
     finally:
         for k, v in saved.items():
@@ -166,3 +179,4 @@ def role_env(role: str) -> Iterator[None]:
                 os.environ.pop(k, None)
             else:
                 os.environ[k] = v
+        _forget_mlflow_clients()
