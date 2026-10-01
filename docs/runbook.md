@@ -5,7 +5,7 @@ checklist (`lau readiness status`) is signed.
 
 ## Every day (automatic)
 
-The `lau-daily` job (deployed paused; 06:00 UTC once unpaused) runs, in order: definition sync, synthetic decisions,
+The `lau-daily` job (06:00 UTC; schedules on in dev, paused in prod) runs, in order: definition sync, synthetic decisions,
 the loan status feed, shadow scoring, monitoring, evidence, the monthly report on the first run of a month, the console
 snapshot, and `notify`. **`notify` fails while anything needs a person**, so the job's failure email is the alarm. It
 turns green once each item is handled. Weekly, `lau-improvement-cycle` runs a cycle only when one is queued.

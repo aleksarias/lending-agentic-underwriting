@@ -1,5 +1,5 @@
 # Databricks Asset Bundle for lending-agentic-underwriting.
-# Jobs are deployed PAUSED; the same `lau` entry points run locally and on serverless.
+# dev runs the schedules (UNPAUSED); prod deploys PAUSED. The same `lau` entry points run locally and on serverless.
 bundle:
   name: lending-agentic-underwriting
 
@@ -11,6 +11,9 @@ variables:
   environment_version:
     description: Serverless environment version (v3-v5 = Python 3.12, matching the local toolchain)
     default: "4"
+  schedule_pause_status:
+    description: PAUSED or UNPAUSED for every job schedule (development mode only honours an explicit value)
+    default: PAUSED
 
 artifacts:
   lau_wheel:
@@ -38,8 +41,8 @@ targets:
     default: true
     workspace:
       host: https://dbc-67e8cd43-5f63.cloud.databricks.com
-    presets:
-      trigger_pause_status: PAUSED
+    variables:
+      schedule_pause_status: UNPAUSED  # schedules on since 2026-10-01 (estimate ~$50-70/month; check with `lau cost`)
   prod:
     mode: production
     workspace:
