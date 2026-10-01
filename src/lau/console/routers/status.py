@@ -72,9 +72,32 @@ def _status_core() -> dict:
     }
 
 
+def snapshot_state() -> dict:
+    """Where the console's data comes from and how fresh it is."""
+    from lau.console.actions import mirror_mode
+    from lau.console.snapshot import mirror
+
+    if mirror_mode():
+        m = mirror()
+        st = m.state if m else {}
+        return {
+            "mode": "mirror",
+            "published_at": st.get("published_at"),
+            "synced_at": st.get("synced_at"),
+            "error": st.get("error"),
+        }
+    mode = "direct" if get_settings().project.backend == "databricks" else "fixture"
+    return {"mode": mode, "published_at": None, "synced_at": None, "error": None}
+
+
 @router.get("/status")
 def status(request: Request) -> dict:
-    return {**_status_core(), "actions_enabled": deps.actions_enabled(), "user": deps.current_user(request)}
+    return {
+        **_status_core(),
+        "actions_enabled": deps.actions_enabled(),
+        "user": deps.current_user(request),
+        "snapshot": snapshot_state(),
+    }
 
 
 def _status_sentence(core: dict) -> str:

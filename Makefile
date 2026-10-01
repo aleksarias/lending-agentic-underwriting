@@ -41,7 +41,7 @@ status:
 DBX_ENV = env -i PATH="$$PATH" HOME="$$HOME" $$(grep -E '^(DATABRICKS_HOST|DATABRICKS_TOKEN|DATABRICKS_CONFIG_PROFILE)=' .env | grep -v '=$$' | xargs)
 
 deploy:             ## deploy PAUSED jobs (needs harness SP id from .lau/workspace_state.json)
-	$(DBX_ENV) databricks bundle deploy -t dev --var="harness_sp=$$(python3 -c 'import json;print(json.load(open(".lau/workspace_state.json"))["service_principals"]["harness"]["application_id"])')"
+	$(DBX_ENV) databricks bundle deploy -t dev --var="harness_sp=$$(python3 -c 'import json;print(json.load(open(".lau/workspace_state.json"))["service_principals"]["harness"]["application_id"])')" --var="ui_sp=$$(python3 -c 'import json;print(json.load(open(".lau/workspace_state.json"))["service_principals"]["ui"]["application_id"])')"
 
 teardown:           ## remove EVERYTHING the project created (jobs, catalog/schemas, SPs, experiment; restores adopted warehouse)
 	-$(DBX_ENV) databricks bundle destroy -t dev --auto-approve

@@ -99,7 +99,7 @@ def waiting_items() -> list[dict]:
     return items
 
 
-def evidence_packet(candidate_ref: str) -> dict | None:
+def evidence_packet(candidate_ref: str, user: str | None = None) -> dict | None:
     row, res = evals.latest_result(candidate_ref)
     if row is None:
         return None
@@ -133,8 +133,22 @@ def evidence_packet(candidate_ref: str) -> dict | None:
         blockers.append("Already promoted.")
     ready_for_gate = not blockers and gate is None
     gate_ok = gate is not None and gate["passed"]
-    decided_on_gate = approval is not None and gate_row is not None and approval.get("gate_id") == gate_row["gate_id"]
-    approved = decided_on_gate and approval.get("decision") == "approve"
+    from lau.governance.approvals import required, tally
+
+    on_gate = [
+        r
+        for r in evals.approvals_for(candidate_ref)
+        if gate_row is not None and r.get("gate_id") == gate_row["gate_id"]
+    ]
+    counts = tally(on_gate)
+    need = required("promotion")
+    rejected = bool(counts["rejected_by"])
+    user_decided = user is not None and any(r["approver"] == user for r in on_gate)
+    approved = gate_ok and not rejected and counts["count"] >= need
+    if gate_ok and rejected:
+        blockers.append(f"Rejected by {', '.join(counts['rejected_by'])} on the latest gate result.")
+    elif gate_ok and counts["count"] < need and user_decided:
+        blockers.append(f"{counts['count']} of {need} approvals: another person must approve.")
     if not enabled:
         blockers.append("Actions are disabled on this console.")
     return {
@@ -153,10 +167,16 @@ def evidence_packet(candidate_ref: str) -> dict | None:
         "fairness_min_air": num(fairness.get("min_air")),
         "cost_usd": ops.cycle_cost_usd(tags.get("cycle_id")),
         "decision": evals.approval_record(approval) if approval else None,
+        "approvals": {
+            "required": need,
+            "approvers": counts["approvers"],
+            "rejected_by": counts["rejected_by"],
+            "on_gate": on_gate,
+        },
         "promotion": _promotion(promoted),
         "holdout": {"used": used, "budget": budget},
         "can_run_gate": enabled and ready_for_gate,
-        "can_decide": enabled and gate_ok and not decided_on_gate and not promoted,
+        "can_decide": enabled and gate_ok and not rejected and not user_decided and not approved and not promoted,
         "can_promote": enabled and approved and not promoted,
         "blockers": blockers,
     }

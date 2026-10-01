@@ -144,6 +144,14 @@ export function StatusBar({ onMenu, onAsk }: { onMenu: () => void; onAsk: () => 
           <Pill tone={s.environment === "prod" ? "crit" : "neutral"}>
             {s.environment} · {s.data_mode}
           </Pill>
+          {s.snapshot?.mode === "mirror" && (
+            <span title={s.snapshot.error ? `Last sync failed: ${s.snapshot.error}` : "The console mirrors the workspace through its snapshot; it refreshes every minute"}>
+              <Pill tone={s.snapshot.error ? "warn" : "neutral"}>
+                data as of {s.snapshot.published_at ? fmtAgo(s.snapshot.published_at) : "no snapshot yet"}
+              </Pill>
+            </span>
+          )}
+          {s.snapshot?.mode === "fixture" && <Pill tone="warn">exported copy</Pill>}
         </>
       )}
       <Search />

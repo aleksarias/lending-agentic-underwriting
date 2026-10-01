@@ -7,9 +7,10 @@ import { useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import type { SettingsData, Tile } from "../../api/types";
 import { fmtAgo, fmtDateTime } from "../../lib/format";
-import { Banner, PageHeader, Section, Tiles, UnavailableState } from "../ui";
+import { Banner, PageHeader, Section, Tiles } from "../ui";
 import { AccessChecks, BenchmarkDefinitions, ConfigVersions, ReportsSection, accessFacts, isDirty } from "./AccessAndVersions";
 import { ConfigBlock } from "./ConfigTables";
+import { Notifications, notificationsTile } from "./Notifications";
 
 const TOC: [string, string][] = [
   ["settings-access", "Access checks"],
@@ -58,7 +59,7 @@ export function SettingsView({ s }: { s: SettingsData }) {
       sub: code?.git_sha ? `commit ${code.git_sha.slice(0, 10)}` : null,
       tone: code && isDirty(code) ? "warn" : null,
     },
-    { key: "notify", label: "Notifications", value: "Not configured", sub: "email or Slack" },
+    notificationsTile(s.notifications),
   ];
 
   return (
@@ -133,7 +134,7 @@ export function SettingsView({ s }: { s: SettingsData }) {
       </Section>
 
       <Section id="settings-notifications" title="Notifications">
-        <UnavailableState u={s.notifications} title="Notifications are not configured" />
+        <Notifications n={s.notifications} />
       </Section>
 
       <Section id="settings-reports" title="Reports">

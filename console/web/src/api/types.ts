@@ -98,6 +98,8 @@ export interface StatusSummary {
   feed: { live: boolean; last_received_at?: ISODate | null; quality_failures?: number | null };
   actions_enabled: boolean;
   user: string;
+  /** Where the data comes from: a mirror of the console snapshot (with its age), the workspace directly, or a fixture */
+  snapshot?: { mode: "mirror" | "direct" | "fixture"; published_at: ISODate | null; synced_at: ISODate | null; error: string | null };
 }
 
 export type EventType =
@@ -550,6 +552,8 @@ export interface GateSummary {
 
 export interface ApprovalRecord {
   approval_id: string;
+  /** the holdout gate result the decision was made on (promotions) */
+  gate_id?: string | null;
   kind: "promotion" | "definition";
   ref: string;
   definition_version: string;
@@ -784,6 +788,8 @@ export interface EvidencePacket {
   decision: ApprovalRecord | null;
   promotion: Promotion | null;
   holdout: { used: number; budget: number };
+  /** Two-person rule on the latest gate result: approvals required and who approved or rejected */
+  approvals?: { required: number; approvers: string[]; rejected_by: string[]; on_gate: ApprovalRecord[] };
   can_run_gate: boolean;
   can_decide: boolean;
   can_promote: boolean;
@@ -861,6 +867,13 @@ export interface CostData {
   by_agent: { agent: string; cost_usd: number; runs: number }[];
   pricing: { usd_per_dbu: number; dbu_per_hour: number; warehouse_size: string };
   billing_available: boolean;
+  /** Workspace spend at list price from system.billing, as of the last console snapshot (mirror mode) */
+  billing?: {
+    total_usd: number;
+    month_to_date_usd: number;
+    by_day: { day: string; usd: number }[];
+    by_product: { product: string; usd: number }[];
+  } | null;
 }
 
 // ------------------------------------------------------------------------------------------------------ settings
@@ -872,7 +885,23 @@ export interface SettingsData {
   protected_classes: Record<string, unknown>;
   config_versions: { component: string; version: string; recorded_at: ISODate; git_sha: string | null }[];
   access_checks: { role: string; object: string; expected: "allow" | "deny"; observed: string; ok: boolean; checked_at: ISODate }[];
-  notifications: Unavailable;
+  notifications: Unavailable | NotificationsInfo;
+}
+
+export interface NotificationItem {
+  kind: string;
+  id: string;
+  title: string;
+  body: string;
+  href: string;
+  ts: ISODate;
+  delivered: boolean;
+}
+
+export interface NotificationsInfo {
+  available: true;
+  channel: "desktop" | "log";
+  recent: NotificationItem[];
 }
 
 // ---------------------------------------------------------------------------------------------- search / ask

@@ -46,6 +46,21 @@ flowchart LR
 
 ## Run it
 
+**On your machine, mirroring the workspace (recommended).** The scheduled jobs, every improvement cycle and every
+state-changing `lau` command publish a *console snapshot*: the tables the read-only ui role may read, written as
+parquet files to the `ops.console` volume. The local console downloads the small manifest every minute through the
+Files API and pulls only changed files into a local DuckDB copy. Browsing never wakes the SQL warehouse, which matters
+because a 2X-Small warehouse costs about $2.80 an hour while it runs. A running cycle also publishes a live document
+every minute (heartbeats and the recent trace), so Live activity stays current. The status bar says how old the data
+is. In this mode, human actions run through the `lau` CLI against the workspace, then publish a fresh snapshot.
+
+```bash
+uv run lau console --mirror --actions
+```
+
+It also shows a macOS notification when a high alert is raised, a decision starts waiting for you, a cycle finishes
+or the verdict changes (Settings lists the recent ones). Scheduled jobs email the deploying user when they fail.
+
 Offline, on a copy of the real tables (no Databricks connection, no credentials needed):
 
 ```bash

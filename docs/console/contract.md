@@ -48,7 +48,8 @@ unknown ones, 403 for actions while disabled, all as `{"detail": "..."}`. Respon
 
 | Method, path | Response type | Reads | Notes |
 |---|---|---|---|
-| `/status` | `StatusSummary` | ops.active_definition, definition_versions, model_registry, improvement_ledger, cycles, cycle_heartbeat, cost_log, approvals/gate_results/evaluations (for waiting), alerts, config/default_definition.yaml | cached 10 s |
+| `/notifications` | `Unavailable \| NotificationsInfo` | the mirror's notification log | desktop notifications run only in mirror mode |
+| `/status` | `StatusSummary` (with `snapshot`: mode mirror/direct/fixture, published and synced times) | ops.active_definition, definition_versions, model_registry, improvement_ledger, cycles, cycle_heartbeat, cost_log, approvals/gate_results/evaluations (for waiting), alerts, config/default_definition.yaml | cached 10 s |
 | `/overview` | `OverviewData` | as status + events + pipeline_state | status sentence is deterministic text, no LLM |
 | `/activity` | `ActivityData` | cycles, cycle_heartbeat, cycle_control, agent_trace, pipeline_state, config budgets | poll every 5 s; during an agent run the orchestrator writes a heartbeat and flushes the trace every 60 s |
 | `/activity/trace?cycle_id&[after]` | `TraceEntry[]` | agent_trace | incremental |
@@ -88,7 +89,7 @@ unknown ones, 403 for actions while disabled, all as `{"detail": "..."}`. Respon
 | `/shadow` | `ShadowData` | ops.shadow_scores | available=false with reason if never run |
 | `/alerts` | `AlertsData` | ops.alerts, ops.alert_acks, ops.monitoring_runs | each alert carries a plain `title`, `current` (raised by the latest monitoring run) and `ack_at`/`ack_note`; open = current and not acknowledged (the status bar count) |
 | POST `/alerts/{alert_id}/ack` `{note}` | `ActionResult` | writes ops.alert_acks (harness store) | actions only |
-| `/cost` | `CostData` | ops.cost_log, agent_trace (cost by agent), config project/budgets | billing_available=false unless system.billing readable; `by_agent` leaves out a running cycle (its cost is logged when it ends) so it matches the cost log |
+| `/cost` | `CostData` (with `billing` actuals from system.billing in mirror mode) | ops.cost_log, agent_trace (cost by agent), config project/budgets | billing_available=false unless system.billing readable; `by_agent` leaves out a running cycle (its cost is logged when it ends) so it matches the cost log |
 | `/settings` | `SettingsData` | config/*.yaml, ops.config_versions, ops.access_checks | |
 | `/search?q` | `SearchResult[]` | model_registry, cycles, feature_registry.features, data_catalog, reports, definition_versions | max 30 |
 | POST `/ask` `{question}` | `AskResponse` | a read-only Claude agent (`lau.console.ask`, role `ask`, prompt `agents/prompts/ask.md`) with `describe_tables` and `sql_query` over the ui role; row-level `ops.shadow_scores` only through aggregates | 400 empty question; 503 without ANTHROPIC_API_KEY; 429 at the monthly hard stop; one question at a time; traced to ops.agent_trace and costed in ops.cost_log |

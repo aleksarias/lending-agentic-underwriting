@@ -15,6 +15,32 @@ from lau.settings import get_settings
 router = api_router()
 
 
+def _billing_actuals() -> dict | None:
+    """Workspace spend at list price from system.billing, as of the last console snapshot (mirror mode only)."""
+    import io
+
+    import pyarrow.parquet as pq
+
+    from lau.console.snapshot import mirror_extra
+
+    raw = mirror_extra("billing.parquet")
+    if not raw:
+        return None
+    df = pq.read_table(io.BytesIO(raw)).to_pandas()
+    if df.empty:
+        return {"total_usd": 0.0, "month_to_date_usd": 0.0, "by_day": [], "by_product": []}
+    df["usage_date"] = df["usage_date"].astype(str)
+    month = ops.now_utc().strftime("%Y-%m")
+    by_day = df.groupby("usage_date")["list_usd"].sum().sort_index()
+    by_product = df.groupby("product")["list_usd"].sum().sort_values(ascending=False)
+    return {
+        "total_usd": round(float(df["list_usd"].sum()), 4),
+        "month_to_date_usd": round(float(df.loc[df["usage_date"].str.startswith(month), "list_usd"].sum()), 4),
+        "by_day": [{"day": d, "usd": round(float(v), 4)} for d, v in by_day.items()],
+        "by_product": [{"product": str(k), "usd": round(float(v), 4)} for k, v in by_product.items()],
+    }
+
+
 @router.get("/cost")
 def cost() -> dict:
     df = ops.cost_log()
@@ -40,6 +66,7 @@ def cost() -> dict:
         by_agent.sort(key=lambda a: a["cost_usd"], reverse=True)
     caps = config.cycle_caps()
     wh = get_settings().project.warehouse
+    billing = _billing_actuals()
 
     def rounded(d: dict) -> dict:
         return {k: round(v, 4) if isinstance(v, float) else v for k, v in d.items()}
@@ -59,5 +86,6 @@ def cost() -> dict:
             "dbu_per_hour": float(getattr(wh, "dbu_per_hour", 0.0)),
             "warehouse_size": str(getattr(wh, "cluster_size", "")),
         },
-        "billing_available": False,
+        "billing_available": billing is not None,
+        "billing": billing,
     }

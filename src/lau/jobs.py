@@ -16,8 +16,11 @@ def _bootstrap_runtime() -> None:
 
         for env_key, secret_key in (
             ("ANTHROPIC_API_KEY", "anthropic_api_key"),
+            ("ANTHROPIC_WORKSPACE_ID", "anthropic_workspace_id"),
             ("LAU_AGENT_CLIENT_ID", "agent_client_id"),
             ("LAU_AGENT_CLIENT_SECRET", "agent_client_secret"),
+            ("LAU_UI_CLIENT_ID", "ui_client_id"),  # the console snapshot reads as the console's own identity
+            ("LAU_UI_CLIENT_SECRET", "ui_client_secret"),
         ):
             if not os.environ.get(env_key):
                 try:
@@ -47,6 +50,10 @@ def main() -> None:
         from lau.promotion.monitor import run_monitor
 
         run_monitor()
+    elif task == "console-snapshot":
+        from lau.console.snapshot import publish
+
+        publish(source="job")
     elif task == "evidence":
         from lau.evidence.run import run_all
 

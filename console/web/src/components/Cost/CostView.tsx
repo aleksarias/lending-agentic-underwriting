@@ -216,7 +216,7 @@ export function CostView({ c, status }: { c: CostData; status: StatusSummary | u
             </div>
           </Card>
           <div className="stack">
-            {!c.billing_available && <UnavailableState u={BILLING} title="Billing actuals are not available" />}
+            {c.billing ? <BillingActuals b={c.billing} /> : <UnavailableState u={BILLING} title="Billing actuals are not available" />}
             <UnavailableState u={SERVING} title="Serving cost per 1,000 decisions is not measured" />
           </div>
         </div>
@@ -225,3 +225,40 @@ export function CostView({ c, status }: { c: CostData; status: StatusSummary | u
   );
 }
 
+
+/** Workspace spend at list price from system.billing (the whole workspace, not only this project). */
+function BillingActuals({ b }: { b: NonNullable<CostData["billing"]> }) {
+  return (
+    <Card title="Billing actuals (list price)" kind="measured">
+      <KeyValue
+        items={[
+          ["This month", fmtUsd(b.month_to_date_usd)],
+          ["Last 45 days", fmtUsd(b.total_usd)],
+        ]}
+      />
+      {b.by_product.length > 0 && (
+        <div className="table-wrap" style={{ marginTop: 10 }}>
+          <table className="data">
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th className="r">Spend, 45 days</th>
+              </tr>
+            </thead>
+            <tbody>
+              {b.by_product.map((x) => (
+                <tr key={x.product}>
+                  <td>{x.product}</td>
+                  <td className="r num">{fmtUsd(x.usd)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <div className="small muted" style={{ marginTop: 10 }}>
+        From system.billing at list price, as of the last console snapshot. It covers the whole workspace and lags a few hours; invoices apply your contract price.
+      </div>
+    </Card>
+  );
+}

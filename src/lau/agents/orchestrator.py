@@ -120,10 +120,29 @@ def _heartbeat(ctx: CycleContext, step: str, state: str, agent: str | None = Non
             "experiments_used": int(ctx.experiments_used),
             "spent_usd": float(ctx.spent_usd),
         }
+        ctx.state.setdefault("live_beats", []).append(row)
         df = pd.DataFrame([row]).astype({"experiments_used": "int32"})  # INT in the console contract
         get_store("harness").write_df("ops", "cycle_heartbeat", df, mode="append")
     except Exception as e:  # noqa: BLE001 - liveness telemetry must never break a cycle
         log(f"warning: heartbeat write failed ({step}/{state}): {type(e).__name__}: {e}")
+    _publish_live(ctx, log, status=state if step == "end" else None)
+
+
+def _publish_live(ctx: CycleContext, log=print, status: str | None = None) -> None:
+    """The running cycle's state for the console mirror (heartbeats and recent trace from memory). Best effort."""
+    from lau.console import snapshot
+
+    if not snapshot.live_enabled():
+        return
+    info = ctx.state.get("cycle_row") or {}
+    try:
+        snapshot.publish_live(
+            {**info, "status": status or "running"},
+            [{**b, "ts": b["ts"].isoformat()} for b in ctx.state.get("live_beats", [])],
+            [{**r, "ts": r["ts"].isoformat()} for r in list(ctx.trace.recent)],
+        )
+    except Exception as e:  # noqa: BLE001 - the console catches up at the next snapshot
+        log(f"warning: live console update failed ({type(e).__name__}: {str(e)[:120]})")
 
 
 def _flush_trace(ctx: CycleContext, log=print) -> None:
@@ -225,6 +244,13 @@ async def run_cycle(reason: str = "manual", log=print) -> dict:
     ctx = CycleContext(cycle_id=cycle_id, version=version, trace=TraceWriter(cycle_id, version))
     st = get_store("harness")
     log(f"cycle {cycle_id} under definition {version} ({reason})\n{est.render()}")
+    ctx.state["cycle_row"] = {
+        "cycle_id": cycle_id,
+        "definition_version": version,
+        "reason": reason,
+        "started_at": datetime.now(UTC).isoformat(),
+        "summary_json": "{}",
+    }
     # Before `started_at` is taken, so the ledger as of the cycle's start includes what this cycle runs with.
     versioning.try_record_config_versions(f"cycle {cycle_id}", log=log)
     st.write_df(
@@ -314,7 +340,23 @@ async def run_cycle(reason: str = "manual", log=print) -> dict:
                 except Exception as e:  # noqa: BLE001 - the cycle has ended either way
                     log(f"warning: could not record the honored stop request ({type(e).__name__}: {e})")
             _heartbeat(ctx, "end", status, log=log)
+    _after_cycle(log)
     return outcome
+
+
+def _after_cycle(log=print) -> None:
+    """Recompute the evidence (so the verdict covers this cycle), then refresh the console snapshot. Best effort."""
+    from lau.console.snapshot import publish_quietly
+    from lau.evidence.config import load_benchmark_config
+
+    try:
+        if load_benchmark_config().refresh.after_cycle:
+            from lau.evidence.run import run_all
+
+            run_all(log=log)
+    except Exception as e:  # noqa: BLE001 - the daily evidence job catches up
+        log(f"warning: evidence refresh after the cycle failed ({type(e).__name__}: {str(e)[:160]})")
+    publish_quietly("cycle", log_fn=log)
 
 
 def _brief(o: dict) -> dict:

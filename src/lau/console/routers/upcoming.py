@@ -93,7 +93,7 @@ def upcoming() -> dict:
     used, budget = evals.holdout_used(active), evals.holdout_budget()
     plan_cycle, plan = ops.latest_plan()
     return {
-        "jobs": ops.declared_jobs(),
+        "jobs": ops.synced_jobs() or ops.declared_jobs(),
         "queue": ops.queue(),
         "next_plan": plan,
         "next_plan_cycle_id": plan_cycle,

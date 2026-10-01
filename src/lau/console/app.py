@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 os.environ.setdefault("MLFLOW_DISABLE_AGENT_HINT", "1")
@@ -24,9 +25,24 @@ from lau.settings import ROOT  # noqa: E402
 WEB_DIST = Path(os.environ.get("LAU_CONSOLE_DIST", ROOT / "console" / "web" / "dist"))
 
 
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    from lau.console.actions import mirror_mode
+
+    if mirror_mode():  # keep a local copy of the workspace from the console snapshot (no SQL warehouse)
+        from lau.console.snapshot import start_mirror
+
+        start_mirror()
+    yield
+
+
 def create_app() -> FastAPI:
     app = FastAPI(
-        title="Underwriting Console API", version="1.0.0", docs_url="/api/docs", openapi_url="/api/openapi.json"
+        title="Underwriting Console API",
+        version="1.0.0",
+        docs_url="/api/docs",
+        openapi_url="/api/openapi.json",
+        lifespan=_lifespan,
     )
     app.add_middleware(
         CORSMiddleware,

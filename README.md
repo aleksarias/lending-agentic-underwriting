@@ -302,13 +302,16 @@ make teardown                             # remove everything the project create
 | `lau status` / `lau cost` | system status / actual DBUs from `system.billing.usage` + logged spend |
 | `lau evidence run [--only step]` | benchmark ledger, definition sensitivity, vintages, cash-flow cohorts, proxy scan, registry mirror, verdict |
 | `lau versions show` / `record` | version ledger for thresholds, budgets, models, benchmarks, grants, prompts and code |
-| `lau console [--port] [--actions]` | the Underwriting Console (API + web app); human actions only with `--actions` |
+| `lau console [--mirror] [--actions]` | the Underwriting Console; `--mirror` follows the workspace through the console snapshot (no warehouse while browsing); human actions only with `--actions` |
+| `lau console-snapshot publish` | publish what the console may read to the `ops.console` volume (also done by jobs, cycles and the commands below) |
+| `lau gate <ref>` / `lau decide <ref> --decision … --rationale …` / `lau promote-approved <ref>` | the promotion steps one at a time: holdout gate, a person's decision (two-person rule in prod), promotion |
+| `lau ack-alert <id> [--note]` | acknowledge a monitoring alert |
 | `lau teardown` | remove all project resources (restores an adopted warehouse) |
 
 ### Scheduled jobs (Asset Bundle, `databricks.yml`)
 
 `lau-definition-sync` (applies a changed definition only with a recorded approval), `lau-shadow-scoring`,
-`lau-monitoring`, `lau-evidence` (recomputes the benchmark ledger and verdict the console shows), `lau-improvement-cycle` (runs when `ops.cycle_queue` has work). All run on serverless compute as
+`lau-daily` (definition sync, shadow scoring, monitoring, evidence and the console snapshot, in that order, waking the warehouse once a day) and `lau-improvement-cycle` (weekly; runs when `ops.cycle_queue` has work). All run on serverless compute as
 the harness service principal and are deployed **paused**. Targets: `dev` (this workspace) and `prod` (placeholder).
 
 ## Underwriting Console (web UI)

@@ -9,12 +9,9 @@ Contract: docs/console/contract.md and console/web/src/api/types.ts.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-
-import pandas as pd
 from fastapi import Body, Depends, HTTPException, Request
 
-from lau.console import deps
+from lau.console import actions, deps
 from lau.console.services import models, ops
 from lau.console.util import api_router, boolean, clear_cache, iso, safe_token, text, unavailable
 
@@ -74,21 +71,10 @@ def alerts() -> dict:
 
 @router.post("/alerts/{alert_id}/ack", dependencies=[Depends(deps.require_actions)])
 def acknowledge(alert_id: str, request: Request, body: dict = Body(default={})) -> dict:
-    from lau.store import get_store
-
     if not safe_token(alert_id):
         raise HTTPException(status_code=400, detail="invalid alert id")
     if alert_id not in {a["id"] for a in ops.alerts()}:
         raise HTTPException(status_code=404, detail="unknown alert")
-    if alert_id in ops.acks():
-        return {"ok": True, "message": "Already acknowledged.", "ref": alert_id}
-    user = deps.current_user(request)
-    row = {
-        "alert_id": alert_id,
-        "acked_at": datetime.now(UTC),
-        "acked_by": user,
-        "note": str(body.get("note") or "").strip()[:1000],
-    }
-    get_store("harness").write_df("ops", "alert_acks", pd.DataFrame([row]), mode="append")
+    result = actions.dispatch("ack", alert_id=alert_id, note=str(body.get("note") or ""), by=deps.current_user(request))
     clear_cache()
-    return {"ok": True, "message": f"Acknowledged by {user}. The alert stays in the history.", "ref": alert_id}
+    return result

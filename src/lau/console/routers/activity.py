@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from fastapi import Body, Depends, HTTPException, Request
 
-from lau.console import deps
+from lau.console import actions, deps
 from lau.console.services import definitions as defs
 from lau.console.services import ops
 from lau.console.util import api_router, clear_cache, iso, safe_token
@@ -53,8 +53,6 @@ def trace(cycle_id: str, after: str | None = None) -> list[dict]:
 
 @router.post("/activity/stop", dependencies=[Depends(deps.require_actions)])
 def stop(request: Request, body: dict = Body(...)) -> dict:
-    from lau.agents.orchestrator import request_stop
-
     cycle_id = str(body.get("cycle_id") or "")
     reason = str(body.get("reason") or "").strip()[:500]
     if not safe_token(cycle_id):
@@ -65,10 +63,6 @@ def stop(request: Request, body: dict = Body(...)) -> dict:
     if str(row.get("status")) != "running":
         return {"ok": False, "message": f"Cycle {cycle_id} is not running ({row.get('status')}).", "ref": cycle_id}
     user = deps.current_user(request)
-    request_stop(cycle_id, reason or f"stopped from the console by {user}", requested_by=user)
+    result = actions.dispatch("stop", cycle_id=cycle_id, reason=reason, by=user)
     clear_cache()
-    return {
-        "ok": True,
-        "message": f"Stop requested. Cycle {cycle_id} stops before its next agent run; the current run finishes.",
-        "ref": cycle_id,
-    }
+    return result

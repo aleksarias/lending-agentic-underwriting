@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import threading
+from collections import deque
 from datetime import UTC, datetime
 from typing import Any
 
@@ -32,6 +33,8 @@ class TraceWriter:
         self.definition_version = definition_version
         self._rows: list[dict[str, Any]] = []
         self._lock = threading.Lock()
+        # the newest rows, kept after flushing, for the console's live view of a running cycle
+        self.recent: deque[dict[str, Any]] = deque(maxlen=400)
 
     def log(
         self,
@@ -45,21 +48,21 @@ class TraceWriter:
         status: str = "ok",
     ) -> None:
         with self._lock:
-            self._rows.append(
-                {
-                    "ts": datetime.now(UTC),
-                    "cycle_id": self.cycle_id,
-                    "definition_version": self.definition_version,
-                    "agent": agent,
-                    "principal": principal,
-                    "action": action,
-                    "state_changing": bool(state_changing),
-                    "inputs": _dump(inputs),
-                    "outputs": _dump(outputs),
-                    "cost_usd": float(cost_usd),
-                    "status": status,
-                }
-            )
+            row = {
+                "ts": datetime.now(UTC),
+                "cycle_id": self.cycle_id,
+                "definition_version": self.definition_version,
+                "agent": agent,
+                "principal": principal,
+                "action": action,
+                "state_changing": bool(state_changing),
+                "inputs": _dump(inputs),
+                "outputs": _dump(outputs),
+                "cost_usd": float(cost_usd),
+                "status": status,
+            }
+            self._rows.append(row)
+            self.recent.append(row)
 
     @property
     def rows(self) -> list[dict[str, Any]]:

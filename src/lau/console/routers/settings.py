@@ -24,6 +24,31 @@ def _benchmarks() -> list[dict]:
     return out
 
 
+def notifications_payload() -> dict:
+    """Desktop notifications run inside the mirrored console; elsewhere there is nothing to deliver them."""
+    import platform
+
+    from lau.console import notifications
+    from lau.console.actions import mirror_mode
+
+    if not mirror_mode():
+        return unavailable(
+            "Notifications are delivered by the console running on your machine in mirror mode "
+            "(lau console --mirror): high alerts, decisions waiting, finished cycles and verdict changes.",
+            ["Run the console with --mirror"],
+        )
+    return {
+        "available": True,
+        "channel": "desktop" if platform.system() == "Darwin" else "log",
+        "recent": notifications.recent(),
+    }
+
+
+@router.get("/notifications")
+def notifications_list() -> dict:
+    return notifications_payload()
+
+
 @router.get("/settings")
 def settings() -> dict:
     return {
@@ -34,8 +59,5 @@ def settings() -> dict:
         "protected_classes": config.protected(),
         "config_versions": ops.config_versions_latest(),
         "access_checks": ops.access_checks(),
-        "notifications": unavailable(
-            "Notifications (email or Slack on alerts, waiting decisions and finished cycles) are not configured.",
-            ["Notification destination (Databricks SQL alert destinations or a Slack webhook)"],
-        ),
+        "notifications": notifications_payload(),
     }

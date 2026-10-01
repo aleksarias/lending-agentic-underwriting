@@ -26,3 +26,9 @@ monitoring:
   early_indicator_mob: 6
 reason_codes:
   top_n: 4
+
+# Two-person rule: how many DIFFERENT people must approve before a change takes effect, per environment.
+# In dev you are the only approver, so it is 1; production requires a second person.
+approvals:
+  promotion: {dev: 1, prod: 2}
+  definition: {dev: 1, prod: 2}

@@ -259,6 +259,7 @@ def approval_record(r: dict) -> dict:
         "approver": str(r.get("approver") or ""),
         "rationale": str(text(r.get("rationale")) or ""),
         "ts": iso(r["ts"]),
+        "gate_id": text(r.get("gate_id")),
     }
 
 

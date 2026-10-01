@@ -161,6 +161,14 @@ export function DecisionSteps(props: Props) {
               A person reads the evidence and approves or rejects the candidate with a rationale of at least 10 characters. Approving records a decision; it does not
               promote anything.
             </p>
+            {packet.approvals && (
+              <p className="small" style={{ margin: 0 }}>
+                Approvals on the latest gate result: <strong>{packet.approvals.approvers.length} of {packet.approvals.required}</strong>
+                {packet.approvals.required > 1 ? " (two-person rule: different people must approve)" : ""}
+                {packet.approvals.approvers.length > 0 ? `, by ${packet.approvals.approvers.join(", ")}` : ""}
+                {packet.approvals.rejected_by.length > 0 ? `; rejected by ${packet.approvals.rejected_by.join(", ")}` : ""}.
+              </p>
+            )}
             {flow.decision && (
               <div className="stack" style={{ gap: 4 }}>
                 <span className="small">

@@ -14,6 +14,8 @@ from lau.store import LANDING_VOLUME, LocalStore, Store
 
 # Schemas that receive DataFrame writes need a landing volume for staged parquet.
 LANDING_SCHEMAS = ["raw", "curated", "labels", "feature_registry", "experiments", "holdout", "production", "ops"]
+# The console snapshot (lau.console.snapshot): written by the harness identity, read by the console's ui identity.
+CONSOLE_VOLUME = "console"
 TAGS = "project = 'lau', managed_by = 'lending-agentic-underwriting'"
 
 
@@ -31,6 +33,10 @@ def schema_ddl(s: Settings) -> list[str]:
             f"CREATE VOLUME IF NOT EXISTS `{s.catalog}`.`{s.schema(key)}`.`{LANDING_VOLUME}` "
             "COMMENT 'lau staging for parquet uploads'"
         )
+    out.append(
+        f"CREATE VOLUME IF NOT EXISTS `{s.catalog}`.`{s.schema('ops')}`.`{CONSOLE_VOLUME}` "
+        "COMMENT 'Console snapshot: tables the ui role can read, mirrored by the local console'"
+    )
     return out
 
 
@@ -46,6 +52,11 @@ def landing_volume_grants(s: Settings, ids: dict[str, str]) -> list[str]:
                     f"GRANT READ VOLUME, WRITE VOLUME ON VOLUME `{s.catalog}`.`{s.schema(key)}`."
                     f"`{LANDING_VOLUME}` TO `{pid}`"
                 )
+    console = f"`{s.catalog}`.`{s.schema('ops')}`.`{CONSOLE_VOLUME}`"
+    if "harness" in ids:
+        out.append(f"GRANT READ VOLUME, WRITE VOLUME ON VOLUME {console} TO `{ids['harness']}`")
+    if "ui" in ids:
+        out.append(f"GRANT READ VOLUME ON VOLUME {console} TO `{ids['ui']}`")
     return out
 
 

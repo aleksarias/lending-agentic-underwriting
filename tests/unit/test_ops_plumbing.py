@@ -717,7 +717,10 @@ def test_init_dry_run_shows_read_only_ui_grants(lake):
     ui = [line for line in plan_init() if "<ui-sp-app-id>" in line]
     assert any("USE CATALOG" in line for line in ui) and any("SELECT ON SCHEMA" in line for line in ui)
     assert any("TABLE" in line and "data_catalog" in line for line in ui)
-    assert not any(w in line for line in ui for w in ("MODIFY", "CREATE", "ALL PRIVILEGES", "VOLUME"))
+    assert not any(w in line for line in ui for w in ("MODIFY", "CREATE", "ALL PRIVILEGES", "WRITE VOLUME"))
+    # the only volume it may touch is the console snapshot, and only to read it
+    volumes = [line for line in ui if "VOLUME" in line]
+    assert volumes and all("GRANT READ VOLUME ON VOLUME" in line and "`console`" in line for line in volumes)
 
 
 class _FakeWorkspace:

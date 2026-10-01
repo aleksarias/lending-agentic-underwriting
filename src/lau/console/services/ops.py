@@ -476,6 +476,43 @@ def queue() -> list[dict]:
     ]
 
 
+def synced_jobs() -> list[dict] | None:
+    """Job schedules and recent runs as the ui identity saw them at the last snapshot (mirror mode), or None."""
+    from lau.console.snapshot import mirror_extra
+
+    raw = mirror_extra("jobs.json")
+    if not raw:
+        return None
+    try:
+        jobs = json.loads(raw)
+    except ValueError:
+        return None
+    return [
+        {
+            "name": str(j.get("name")),
+            "paused": bool(j.get("paused")),
+            "schedule": _describe_cron(j.get("cron")),
+            "next_run_at": j.get("next_run_at"),
+            "last_result": j.get("last_result"),
+            "last_run_at": j.get("last_run_at"),
+        }
+        for j in jobs
+    ]
+
+
+def _describe_cron(expr: str | None) -> str | None:
+    if not expr:
+        return None
+    parts = expr.split()
+    if len(parts) >= 6 and parts[1].isdigit() and parts[2].isdigit():
+        at = f"{int(parts[2]):02d}:{int(parts[1]):02d} UTC"
+        if parts[5] in ("?", "*") and parts[3] in ("*", "?"):
+            return f"Daily at {at}"
+        if parts[3] in ("?", "*"):
+            return f"Weekly on {parts[5].title()} at {at}"
+    return expr
+
+
 @ttl_cache(30)
 def declared_jobs() -> list[dict]:
     """Scheduled jobs as declared in the Databricks Asset Bundle (resources/jobs.yml); every target deploys them

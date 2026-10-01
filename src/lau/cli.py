@@ -242,11 +242,13 @@ def run_cycle(reason: str = "manual") -> None:
 def stop_cycle(
     cycle_id: str = typer.Argument(..., help="cycle to stop, e.g. cy-202609301450-2e0e (see `lau status`)"),
     reason: str = typer.Option("", "--reason", help="why; recorded with the request and shown in the console"),
+    by: str = typer.Option("", "--by", help="who asked (default: the OS user)"),
+    as_json: bool = typer.Option(False, "--json", help="print one JSON ActionResult line"),
 ) -> None:
     """Ask a running cycle to end gracefully before its next agent run (it finishes as stopped_by_user)."""
     import getpass
 
-    from lau.agents.orchestrator import request_stop
+    from lau.console import actions
     from lau.store import get_store
 
     st = get_store("harness")
@@ -257,11 +259,12 @@ def stop_cycle(
         else None
     )
     if cyc is None or cyc.empty:
-        _fail(f"unknown cycle {cycle_id} (see `lau status`)")
+        result = {"ok": False, "message": f"unknown cycle {cycle_id}", "ref": cycle_id}
     elif str(cyc["status"].iloc[0]) != "running":
-        _fail(f"cycle {cycle_id} is not running (status: {cyc['status'].iloc[0]})")
-    _guard(request_stop, cycle_id, reason, getpass.getuser())
-    _log(f"stop requested for {cycle_id}: it ends before its next agent run (a run in progress finishes first)")
+        result = {"ok": False, "message": f"cycle {cycle_id} is not running ({cyc['status'].iloc[0]})", "ref": cycle_id}
+    else:
+        result = _guard(actions.stop, cycle_id, reason, by or getpass.getuser())
+    _action_done(result, as_json)
 
 
 @app.command()
@@ -322,6 +325,85 @@ def promote(
     _log(f"approval recorded: {aid} ({decision})")
     if decision == "approve":
         P.promote(model_version, log=_log)
+
+
+def _action_done(result: dict, as_json: bool, publish: bool = True) -> None:
+    """Print an ActionResult (one JSON line with --json), refresh the console snapshot, exit 1 on failure."""
+    if publish and result.get("ok"):
+        from lau.console.snapshot import publish_quietly
+
+        publish_quietly("cli", log_fn=(lambda m: None) if as_json else _log)
+    if as_json:
+        print(json.dumps(result, default=str))
+    else:
+        (_log if result.get("ok") else console.print)(("" if result.get("ok") else "✗ ") + str(result.get("message")))
+    if not result.get("ok"):
+        raise typer.Exit(1)
+
+
+@app.command("gate")
+def gate_cmd(
+    candidate_ref: str = typer.Argument(..., help="e.g. candidate:7"),
+    as_json: bool = typer.Option(False, "--json", help="print one JSON ActionResult line"),
+) -> None:
+    """Run the holdout promotion gate for a validated candidate (uses one of the definition's holdout reads)."""
+    from lau.console import actions
+
+    _action_done(_guard(actions.run_gate, candidate_ref), as_json)
+
+
+@app.command("decide")
+def decide_cmd(
+    candidate_ref: str = typer.Argument(..., help="e.g. candidate:7"),
+    decision: str = typer.Option(..., "--decision", help="approve or reject"),
+    rationale: str = typer.Option(..., "--rationale", help="why (at least 10 characters)"),
+    approver: str = typer.Option("", "--approver", help="who decides (default: the OS user)"),
+    as_json: bool = typer.Option(False, "--json", help="print one JSON ActionResult line"),
+) -> None:
+    """Record a person's decision on the candidate's latest passing gate result (two-person rule applies)."""
+    import getpass
+
+    from lau.console import actions
+
+    _action_done(_guard(actions.decide, candidate_ref, decision, rationale, approver or getpass.getuser()), as_json)
+
+
+@app.command("promote-approved")
+def promote_approved_cmd(
+    candidate_ref: str = typer.Argument(..., help="e.g. candidate:7"),
+    as_json: bool = typer.Option(False, "--json", help="print one JSON ActionResult line"),
+) -> None:
+    """Promote a candidate whose latest passing gate has the required approvals (promoter identity)."""
+    from lau.console import actions
+
+    _action_done(_guard(actions.promote, candidate_ref), as_json)
+
+
+@app.command("ack-alert")
+def ack_alert_cmd(
+    alert_id: str = typer.Argument(..., help="alert id as shown in the console"),
+    note: str = typer.Option("", "--note"),
+    by: str = typer.Option("", "--by", help="who acknowledges (default: the OS user)"),
+    as_json: bool = typer.Option(False, "--json", help="print one JSON ActionResult line"),
+) -> None:
+    """Acknowledge a monitoring alert (it stays in the history)."""
+    import getpass
+
+    from lau.console import actions
+
+    _action_done(_guard(actions.ack, alert_id, note, by or getpass.getuser()), as_json)
+
+
+snapshot_app = typer.Typer(no_args_is_help=True, help="Console snapshot for a console running on your machine.")
+app.add_typer(snapshot_app, name="console-snapshot")
+
+
+@snapshot_app.command("publish")
+def snapshot_publish() -> None:
+    """Publish the tables the console may read to the console volume (reads as the ui identity)."""
+    from lau.console.snapshot import publish
+
+    _guard(publish, "cli", _log)
 
 
 @app.command()
@@ -405,13 +487,21 @@ def console_cmd(
     host: str = typer.Option("127.0.0.1", help="Bind address (keep on localhost for local use)"),
     actions: bool = typer.Option(False, "--actions", help="Enable human actions (gate, approve, promote, stop)"),
     reload: bool = typer.Option(False, "--reload", help="Auto-reload on code changes (development)"),
+    mirror: bool = typer.Option(
+        False, "--mirror", help="Mirror the workspace through the console snapshot (no SQL warehouse while you browse)"
+    ),
+    mirror_dir: Path = typer.Option(Path(".local_lake/console_mirror"), help="Where the mirror keeps its local copy"),
 ) -> None:
     """Run the Underwriting Console (API + built web app) locally."""
     import uvicorn
 
     if actions:
         os.environ["LAU_CONSOLE_ACTIONS"] = "1"
-    _log(f"Underwriting Console on http://{host}:{port}  (API docs /api/docs; actions {'ON' if actions else 'off'})")
+    if mirror:
+        os.environ.update(LAU_CONSOLE_MIRROR="1", LAU_BACKEND="local", LAU_LOCAL_LAKE=str(mirror_dir.resolve()))
+    mode = "mirror of the workspace" if mirror else "direct"
+    state = "ON" if actions else "off"
+    _log(f"Underwriting Console on http://{host}:{port}  ({mode}; actions {state}; API docs /api/docs)")
     uvicorn.run("lau.console.app:app", host=host, port=port, reload=reload, log_level="warning")
 
 

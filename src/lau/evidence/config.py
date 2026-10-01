@@ -48,6 +48,13 @@ class BootstrapSpec(_Strict):
     level: float = Field(0.95, gt=0.0, lt=1.0)
 
 
+class RefreshSpec(_Strict):
+    """When the evidence is recomputed besides the daily job (keeps the verdict from describing an older state)."""
+
+    after_cycle: bool = True
+    after_promotion: bool = True
+
+
 class BenchmarkConfig(_Strict):
     base_definition: str
     benchmarks: list[BenchmarkSpec] = Field(min_length=1)
@@ -56,6 +63,7 @@ class BenchmarkConfig(_Strict):
     window: WindowSpec = WindowSpec()
     bootstrap: BootstrapSpec = BootstrapSpec()
     fixed_approval_rate: float = Field(0.70, gt=0.0, lt=1.0)
+    refresh: RefreshSpec = RefreshSpec()
 
     @model_validator(mode="after")
     def _check_keys(self) -> BenchmarkConfig:

@@ -175,6 +175,14 @@ def apply(
                 log("Aborted by user.")
                 return {"version": p.version, "ran": [], "aborted": True}
             approval_id = registry.record_approval(st, p.version, text)
+        from lau.governance.approvals import required
+
+        have, need = len(registry.approvers(st, p.version)), required("definition")
+        if have < need:
+            raise ApprovalRequiredError(
+                f"{have} of {need} required approvals for {p.version}: another person must run "
+                "`lau default-definition plan --approve` before it can be applied"
+            )
     if p.stale:
         est = cost.estimate_stages(p.stale, include_agents=run_cycle and "improvement_cycle" in p.stale)
         cost.check_monthly_cap(est.total_usd)

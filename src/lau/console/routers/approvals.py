@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from fastapi import Body, Depends, HTTPException, Request
 
-from lau.console import deps
+from lau.console import actions, deps
 from lau.console.services import approvals, evals
 from lau.console.util import api_router, clear_cache, safe_token
 
@@ -38,90 +38,58 @@ def approvals_list() -> dict:
 
 
 @router.get("/approvals/{candidate_ref}")
-def evidence(candidate_ref: str) -> dict:
-    packet = approvals.evidence_packet(_ref(candidate_ref))
+def evidence(candidate_ref: str, request: Request) -> dict:
+    packet = approvals.evidence_packet(_ref(candidate_ref), user=deps.current_user(request))
     if packet is None:
         raise HTTPException(status_code=404, detail="no evaluation for this candidate")
     return packet
 
 
-@router.post("/approvals/{candidate_ref}/gate", dependencies=[Depends(deps.require_actions)])
-def run_gate(candidate_ref: str) -> dict:
-    ref = _ref(candidate_ref)
-    packet = approvals.evidence_packet(ref)
+def _packet_or_404(ref: str, request: Request) -> dict:
+    packet = approvals.evidence_packet(ref, user=deps.current_user(request))
     if packet is None:
         raise HTTPException(status_code=404, detail="no evaluation for this candidate")
-    if not packet["can_run_gate"]:
-        return {"ok": False, "message": "The gate cannot run: " + " ".join(packet["blockers"]), "ref": ref}
-    from lau.harness.gate import promotion_gate
-    from lau.modeling import registry_io
+    return packet
 
-    mv = approvals.model_version_of(ref)
-    model = registry_io.load_pd_model(registry_io.candidate_uri(mv), "harness")
-    result = promotion_gate(model, packet["definition_version"], ref)
+
+def _blocked(prefix: str, packet: dict, fallback: str, ref: str) -> dict:
+    return {"ok": False, "message": f"{prefix}: " + " ".join(packet["blockers"] or [fallback]), "ref": ref}
+
+
+@router.post("/approvals/{candidate_ref}/gate", dependencies=[Depends(deps.require_actions)])
+def run_gate(candidate_ref: str, request: Request) -> dict:
+    ref = _ref(candidate_ref)
+    packet = _packet_or_404(ref, request)
+    if not packet["can_run_gate"]:
+        return _blocked("The gate cannot run", packet, "it is not ready for the holdout gate.", ref)
+    result = actions.dispatch("gate", candidate_ref=ref)
     clear_cache()
-    passed = bool(result.get("passed"))
-    failed = [k for k, v in (result.get("checks") or {}).items() if not v]
-    message = (
-        f"Holdout gate passed (holdout AUC {result['holdout']['auc']:.4f}). A person can now approve or reject."
-        if passed
-        else f"Holdout gate failed: {', '.join(failed) or 'see the checks'}. Nothing can be promoted."
-    )
-    return {"ok": passed, "message": message, "ref": str(result.get("gate_id"))}
+    return result
 
 
 @router.post("/approvals/{candidate_ref}/decision", dependencies=[Depends(deps.require_actions)])
 def decide(candidate_ref: str, request: Request, body: dict = Body(...)) -> dict:
-    from lau.promotion.promote import record_approval
-
     ref = _ref(candidate_ref)
     try:
         decision, rationale = approvals.decision_payload(body)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    packet = approvals.evidence_packet(ref)
-    if packet is None:
-        raise HTTPException(status_code=404, detail="no evaluation for this candidate")
+    packet = _packet_or_404(ref, request)
     if not packet["can_decide"]:
-        return {
-            "ok": False,
-            "message": "No decision can be recorded: "
-            + " ".join(packet["blockers"] or ["a passing holdout gate without a decision is required."]),
-            "ref": ref,
-        }
-    gate = approvals.gate_id_for(ref)
-    assert gate is not None  # can_decide implies a passing gate
-    approval_id = record_approval(ref, decision, rationale, gate[0], gate[1], approver=deps.current_user(request))
+        return _blocked("No decision can be recorded", packet, "a passing holdout gate is required.", ref)
+    result = actions.dispatch(
+        "decide", candidate_ref=ref, decision=decision, rationale=rationale, approver=deps.current_user(request)
+    )
     clear_cache()
-    verb = "Approved" if decision == "approve" else "Rejected"
-    nxt = " It can now be promoted." if decision == "approve" else ""
-    return {"ok": True, "message": f"{verb} and recorded as {approval_id}.{nxt}", "ref": approval_id}
+    return result
 
 
 @router.post("/approvals/{candidate_ref}/promote", dependencies=[Depends(deps.require_actions)])
-def promote(candidate_ref: str) -> dict:
-    from lau.promotion.promote import PromotionBlockedError
-    from lau.promotion.promote import promote as do_promote
-
+def promote(candidate_ref: str, request: Request) -> dict:
     ref = _ref(candidate_ref)
-    packet = approvals.evidence_packet(ref)
-    if packet is None:
-        raise HTTPException(status_code=404, detail="no evaluation for this candidate")
+    packet = _packet_or_404(ref, request)
     if not packet["can_promote"]:
-        return {
-            "ok": False,
-            "message": "Not promotable: "
-            + " ".join(packet["blockers"] or ["an approval of the latest passing gate is required."]),
-            "ref": ref,
-        }
-    try:
-        promo = do_promote(approvals.model_version_of(ref), log=lambda _m: None)
-    except PromotionBlockedError as e:
-        return {"ok": False, "message": f"Promotion blocked: {e}", "ref": ref}
+        return _blocked("Not promotable", packet, "the required approvals of the latest passing gate are missing.", ref)
+    result = actions.dispatch("promote", candidate_ref=ref)
     clear_cache()
-    serving = " It is now serving." if promo.get("serving") else " It is champion for its definition but not serving."
-    return {
-        "ok": True,
-        "message": f"Promoted to production v{promo['production_model_version']}.{serving}",
-        "ref": str(promo["promotion_id"]),
-    }
+    return result
