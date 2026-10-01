@@ -1,5 +1,5 @@
 """Human actions behind the console and the CLI: run the holdout gate, record a decision, promote, stop a cycle,
-acknowledge an alert. Each returns an ActionResult dict: {ok, message, ref}.
+acknowledge an alert, decide on / serve / roll back a rollout. Each returns an ActionResult dict: {ok, message, ref}.
 
 The functions run in-process against the configured backend (the CLI on Databricks; the console on a fixture lake).
 A console that mirrors the workspace (LAU_CONSOLE_MIRROR=1) reads a local copy, so `dispatch` runs the same action
@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 
 import pandas as pd
 
-ACTIONS = ("gate", "decide", "promote", "stop", "ack")
+ACTIONS = ("gate", "decide", "promote", "stop", "ack", "rollout_decide", "rollout_serve", "rollout_rollback")
 
 
 def _ok(message: str, ref: str | None = None) -> dict:
@@ -111,8 +111,14 @@ def promote(candidate_ref: str) -> dict:
         promo = do_promote(model_version_of(candidate_ref), log=lambda _m: None)
     except PromotionBlockedError as e:
         return _no(f"Promotion blocked: {e}", candidate_ref)
-    serving = " It is now serving." if promo.get("serving") else " It is champion for its definition but not serving."
-    return _ok(f"Promoted to production v{promo['production_model_version']}.{serving}", str(promo["promotion_id"]))
+    if promo.get("rollout_id"):
+        then = (
+            f" It scores live decisions in shadow (rollout {promo['rollout_id']}) and decides nothing until the rollout"
+            " is approved and served."
+        )
+    else:
+        then = " It is champion for its definition, which is not active, so it does not serve."
+    return _ok(f"Promoted to production v{promo['production_model_version']}.{then}", str(promo["promotion_id"]))
 
 
 def stop(cycle_id: str, reason: str, by: str) -> dict:
@@ -133,6 +139,47 @@ def ack(alert_id: str, note: str, by: str) -> dict:
     row = {"alert_id": alert_id, "acked_at": datetime.now(UTC), "acked_by": by, "note": (note or "").strip()[:1000]}
     get_store("harness").write_df("ops", "alert_acks", pd.DataFrame([row]), mode="append")
     return _ok(f"Acknowledged by {by}. The alert stays in the history.", alert_id)
+
+
+def rollout_decide(rollout_id: str, decision: str, note: str, approver: str) -> dict:
+    """Record a person's decision on serving a champion that is in shadow (two-person rule: approvals.rollout)."""
+    from lau.decision import rollout
+    from lau.governance.approvals import ApprovalError
+
+    if len((note or "").strip()) < 10:
+        return _no("a note of at least 10 characters is required (what you checked in the shadow report)", rollout_id)
+    try:
+        r = rollout.record_decision(rollout_id, decision, approver, note.strip())
+    except (ApprovalError, rollout.RolloutError) as e:
+        return _no(str(e), rollout_id)
+    if decision == "reject":
+        return _ok(f"Rejected by {approver}. This champion cannot serve from this rollout.", r["approval_id"])
+    if r["approvals"] < r["required"]:
+        return _ok(f"Approved: {r['approvals']} of {r['required']}. Another person must approve.", r["approval_id"])
+    return _ok("Approved. The rollout can now be served.", r["approval_id"])
+
+
+def rollout_serve(rollout_id: str, by: str) -> dict:
+    from lau.decision import rollout
+
+    try:
+        r = rollout.serve(rollout_id, by=by, log=lambda _m: None)
+    except rollout.RolloutError as e:
+        return _no(f"Not served: {e}", rollout_id)
+    before = f"v{r['previous']}" if r.get("previous") else "the legacy policy"
+    note = "" if r.get("published", True) else f" The decision model was not rebuilt: {r.get('error')}"
+    return _ok(f"v{r['serving']} now decides (instead of {before}).{note}", rollout_id)
+
+
+def rollout_rollback(rollout_id: str, reason: str, by: str) -> dict:
+    from lau.decision import rollout
+
+    try:
+        r = rollout.rollback(rollout_id, reason, by=by, log=lambda _m: None)
+    except rollout.RolloutError as e:
+        return _no(f"Not rolled back: {e}", rollout_id)
+    now = f"v{r['serving']}" if r.get("serving") else "the legacy policy"
+    return _ok(f"Rolled back: {now} decides again.", rollout_id)
 
 
 # --------------------------------------------------------------------------------------------------- dispatch
@@ -156,6 +203,22 @@ def _cli_args(name: str, kw: dict) -> list[str]:
         return ["stop-cycle", kw["cycle_id"], "--reason", kw.get("reason") or "", "--by", kw["by"]]
     if name == "ack":
         return ["ack-alert", kw["alert_id"], "--note", kw.get("note") or "", "--by", kw["by"]]
+    if name == "rollout_decide":
+        return [
+            "rollout",
+            "decide",
+            kw["rollout_id"],
+            "--decision",
+            kw["decision"],
+            "--note",
+            kw["note"],
+            "--approver",
+            kw["approver"],
+        ]
+    if name == "rollout_serve":
+        return ["rollout", "serve", kw["rollout_id"], "--by", kw["by"]]
+    if name == "rollout_rollback":
+        return ["rollout", "rollback", kw["rollout_id"], "--reason", kw["reason"], "--by", kw["by"]]
     raise ValueError(f"unknown action {name}")
 
 
@@ -195,5 +258,14 @@ def dispatch(name: str, **kw) -> dict:
         if m is not None:
             m.request_sync()
         return result
-    fn = {"gate": run_gate, "decide": decide, "promote": promote, "stop": stop, "ack": ack}[name]
+    fn = {
+        "gate": run_gate,
+        "decide": decide,
+        "promote": promote,
+        "stop": stop,
+        "ack": ack,
+        "rollout_decide": rollout_decide,
+        "rollout_serve": rollout_serve,
+        "rollout_rollback": rollout_rollback,
+    }[name]
     return fn(**kw)

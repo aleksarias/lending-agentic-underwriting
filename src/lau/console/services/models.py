@@ -196,7 +196,22 @@ def promotions() -> pd.DataFrame:
 
 
 def serving_model() -> dict | None:
-    """The model making decisions: the newest serving promotion (definition superseded or not)."""
+    """The model making decisions: the production version holding the serving alias in the registry mirror.
+
+    Promotions no longer switch serving (a champion starts in shadow; its rollout switches it), so the alias is the
+    truth. Before the first registry sync, fall back to the newest promotion that switched serving.
+    """
+    from lau.modeling.registry_io import SERVING_ALIAS
+
+    _, prod = names()
+    reg = registry()
+    mine = reg[reg["model_name"] == prod] if len(reg) else reg
+    if len(mine):
+        hit = mine[[SERVING_ALIAS in a for a in mine["aliases"]]]
+        if hit.empty:
+            return None  # synced and nothing holds the alias: the legacy policy decides
+        r = hit.iloc[0]
+        return model_ref(prod, str(r["version"]), "champion", text(r.get("definition_version")))
     df = promotions()
     if df.empty:
         return None

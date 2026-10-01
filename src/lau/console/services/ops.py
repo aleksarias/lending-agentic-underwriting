@@ -301,6 +301,17 @@ def latest_plan() -> tuple[str | None, dict | None]:
 
 
 def cycle_report_markdown(cycle_id: str) -> str | None:
+    """The cycle report: stored with the reports (any machine or job), else the local file."""
+    df = read_table(
+        deps.ui_store(),
+        "experiments",
+        "reports",
+        columns=["body"],
+        where=f"kind = 'cycle_report' AND cycle_id = {sql_str(cycle_id)}",
+        limit=1,
+    )
+    if len(df):
+        return str(df["body"].iloc[0])
     p = get_settings().reports_dir / cycle_id / "cycle_report.md"
     try:
         return p.read_text()[:200_000] if p.is_file() else None

@@ -71,7 +71,11 @@ export const useLessons = () => useQ<T.LessonsData>(["lessons"], "/lessons");
 export const useApprovals = () => useQ<T.ApprovalsData>(["approvals"], "/approvals", undefined, STATUS);
 export const useEvidence = (candidateRef: string | undefined) =>
   useQ<T.EvidencePacket>(["evidence", candidateRef], `/approvals/${seg(candidateRef ?? "")}`, undefined, undefined, !!candidateRef);
-export const useDecisions = () => useQ<T.DecisionsData>(["decisions"], "/decisions");
+export const useDecisions = () => useQ<T.DecisionsData>(["decisions"], "/decisions", undefined, STATUS);
+export const useDecision = (decisionId: string | undefined) =>
+  useQ<T.DecisionDetail>(["decision", decisionId], `/decisions/${seg(decisionId ?? "")}`, undefined, undefined, !!decisionId);
+export const useDecisionSearch = (term: string) =>
+  useQ<{ results: T.DecisionRow[] }>(["decision-search", term], "/decisions/search", { q: term }, undefined, term.trim().length >= 3);
 export const useRollouts = () => useQ<T.RolloutsData>(["rollouts"], "/rollouts");
 export const useShadow = () => useQ<T.ShadowData>(["shadow"], "/shadow");
 export const useAlerts = () => useQ<T.AlertsData>(["alerts"], "/alerts", undefined, STATUS);
@@ -100,5 +104,18 @@ export const usePromote = () =>
   useAction((v: { candidate_ref: string }) => apiPost<T.ActionResult>(`/approvals/${seg(v.candidate_ref)}/promote`), [["evidence"], ["approvals"], ["models"], ["status"], ["rollouts"]]);
 export const useAckAlert = () =>
   useAction((v: { alert_id: string; note: string }) => apiPost<T.ActionResult>(`/alerts/${seg(v.alert_id)}/ack`, { note: v.note }), [["alerts"], ["status"]]);
+export const useRolloutDecide = () =>
+  useAction(
+    (v: { rollout_id: string; decision: "approve" | "reject"; note: string }) =>
+      apiPost<T.ActionResult>(`/rollouts/${seg(v.rollout_id)}/decide`, { decision: v.decision, note: v.note }),
+    [["rollouts"], ["status"]],
+  );
+export const useRolloutServe = () =>
+  useAction((v: { rollout_id: string }) => apiPost<T.ActionResult>(`/rollouts/${seg(v.rollout_id)}/serve`), [["rollouts"], ["status"], ["decisions"], ["models"]]);
+export const useRolloutRollback = () =>
+  useAction(
+    (v: { rollout_id: string; reason: string }) => apiPost<T.ActionResult>(`/rollouts/${seg(v.rollout_id)}/rollback`, { reason: v.reason }),
+    [["rollouts"], ["status"], ["decisions"], ["models"]],
+  );
 export const useAsk = () =>
   useMutation<T.AskResponse, Error, { question: string }>({ mutationFn: (v) => apiPost<T.AskResponse>("/ask", v) });

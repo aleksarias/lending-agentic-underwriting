@@ -102,7 +102,7 @@ function Chips({ s }: { s: StatusSummary }) {
         </Link>
       )}
       <Link to="/decisions" title="Decision API">
-        <Pill tone={s.api.live ? "good" : "neutral"}>{s.api.live ? "API live" : "API not live"}</Pill>
+        <Pill tone={s.api.live ? "good" : s.api.state === "endpoint_not_ready" ? "warn" : "neutral"}>{s.api.label ?? (s.api.live ? "API live" : "API not live")}</Pill>
       </Link>
       <Link to="/feed" title="Loan status feed">
         <Pill tone={s.feed.live ? "good" : "neutral"}>{s.feed.live ? `Feed ${fmtAgo(s.feed.last_received_at)}` : "Feed not connected"}</Pill>

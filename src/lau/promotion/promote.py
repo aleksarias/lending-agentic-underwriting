@@ -5,8 +5,10 @@ Flow (`lau promote <candidate_model_version>`):
   2. harness promotion gate (the only holdout read) must pass  -> ops.gate_results
   3. a human approval row must exist                          -> ops.approvals  (`lau approve`)
   4. the PROMOTER identity copies the model version into <catalog>.<production>.pd_model, sets
-     champion_<v8> (and `champion`, the serving alias, only if the version is the active definition),
-     and writes production.promotions.
+     champion_<v8>, and writes production.promotions.
+  5. shadow first: for the active definition the new champion starts a rollout in shadow (lau.decision.rollout).
+     It scores live decisions next to what serves and decides nothing until `lau rollout serve` (with its own
+     approvals) moves `champion`, the serving alias. Rollback is one action: `lau rollout rollback`.
 Champions are never deleted. When the definition changes, old champions are tagged
 superseded_by_definition_change=true but keep serving until a new champion is approved.
 """
@@ -156,9 +158,6 @@ def promote(candidate_mv: str, log=print) -> dict:
         except Exception:  # noqa: BLE001, S110 - no previous champion for this definition
             pass
         c.set_registered_model_alias(prod, registry_io.champion_alias(version), mv.version)
-        serving = version == active_version(reader)
-        if serving:
-            c.set_registered_model_alias(prod, registry_io.SERVING_ALIAS, mv.version)
     promo = {
         "promotion_id": f"promo-{uuid.uuid4().hex[:10]}",
         "ts": datetime.now(UTC),
@@ -166,25 +165,44 @@ def promote(candidate_mv: str, log=print) -> dict:
         "production_model_version": str(mv.version),
         "candidate_model_version": candidate_mv,
         "previous_champion_version": None if prev is None else str(prev.version),
-        "serving": serving,
+        "serving": False,  # serving starts only when its rollout is served (shadow first)
         "approval_id": approval["approval_id"],
         "gate_id": gate["gate_id"],
         "reports_json": json.dumps({k: v["report_id"] for k, v in reports.items()}),
     }
     get_store("promoter").write_df("production", "promotions", pd.DataFrame([promo]), mode="append")
+    rollout_id = None
+    if version == active_version(reader):
+        from lau.decision import rollout
+
+        rollout_id = rollout.start(str(mv.version), version, promo["promotion_id"])["rollout_id"]
     log(
         f"promoted candidate v{candidate_mv} -> {prod} v{mv.version} as {registry_io.champion_alias(version)}"
-        + (" and SERVING" if serving else " (not serving: definition not active)")
+        + (
+            f"; rollout {rollout_id} scores in shadow until `lau rollout serve {rollout_id}`"
+            if rollout_id
+            else " (no rollout: its definition is not active)"
+        )
     )
-    _after_promotion(log)
-    return promo
+    _after_promotion(log, rebuild=rollout_id is not None)
+    return {**promo, "rollout_id": rollout_id}
 
 
-def _after_promotion(log=print) -> None:
-    """Recompute the evidence (the serving model changed) and refresh the console snapshot. Best effort."""
+def _after_promotion(log=print, rebuild: bool = False) -> None:
+    """Recompute the evidence (champions changed) and refresh the console snapshot. Best effort.
+
+    rebuild: also rebuild the decision model, so the new champion starts scoring in shadow (needs an active policy).
+    """
     from lau.console.snapshot import publish_quietly
     from lau.evidence.config import load_benchmark_config
 
+    if rebuild:
+        try:
+            from lau.decision import build
+
+            build.publish(log=log)
+        except Exception as e:  # noqa: BLE001 - e.g. no approved policy yet; `lau decision status` shows the gap
+            log(f"note: the decision model was not rebuilt ({type(e).__name__}: {str(e)[:160]})")
     try:
         if load_benchmark_config().refresh.after_promotion:
             from lau.evidence.run import run_all

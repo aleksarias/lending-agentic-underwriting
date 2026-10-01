@@ -42,7 +42,7 @@ export function PromotionsTable({ rows }: { rows: Promotion[] }) {
     {
       key: "serving",
       header: "Effect",
-      render: (r) => (r.serving ? <Pill tone="good">Serving</Pill> : <Pill>Champion, not serving</Pill>),
+      render: (r) => (r.serving ? <Pill tone="good">Switched serving</Pill> : <Pill>Champion; its rollout decides serving</Pill>),
       sort: (r) => (r.serving ? 1 : 0),
     },
     { key: "approval", header: "Approval", render: (r) => <span className="mono xs">{r.approval_id || "—"}</span> },

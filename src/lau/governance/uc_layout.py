@@ -97,6 +97,8 @@ def plan_init(s: Settings | None = None) -> list[str]:
         "--    entitlements: workspace-access, databricks-sql-access; CAN_USE on the warehouse",
         f"-- 4. MLflow experiment {s.project.mlflow.experiment_path} (harness CAN_MANAGE, agent CAN_EDIT, "
         "promoter CAN_READ; ui none)",
+        f"--    and {s.decisioning['experiment_path']} for decision-model builds (harness CAN_MANAGE, promoter "
+        "CAN_READ; agent and ui none)",
         "-- 5. schemas + landing volumes:",
         *schema_ddl(s),
         "-- 6. grants (principal = SP application_id):",
@@ -175,6 +177,16 @@ def run_init(log: Callable[[str], None] = print) -> WorkspaceState:
 
     # 4. MLflow experiment + permissions
     state.experiment_id = principals.ensure_experiment(w, s, state, log)
+    from databricks.sdk.service.ml import ExperimentPermissionLevel as Lvl
+
+    state.decision_experiment_id = principals.ensure_experiment(  # decision builds: no agent access at all
+        w,
+        s,
+        state,
+        log,
+        path=s.decisioning["experiment_path"],
+        levels={"harness": Lvl.CAN_MANAGE, "promoter": Lvl.CAN_READ},
+    )
     save_state(state)
     return state
 
@@ -198,12 +210,20 @@ def run_teardown(log: Callable[[str], None] = print, yes: bool = False) -> None:
     w = WorkspaceClient(config=databricks_config("admin"))
     state = s.state
     # jobs from the bundle are removed by `databricks bundle destroy` (Makefile teardown runs it first)
-    if state.experiment_id:
+    for exp_id in (state.experiment_id, state.decision_experiment_id):
+        if not exp_id:
+            continue
         try:
-            w.experiments.delete_experiment(state.experiment_id)
-            log(f"deleted MLflow experiment {state.experiment_id}")
+            w.experiments.delete_experiment(exp_id)
+            log(f"deleted MLflow experiment {exp_id}")
         except Exception as e:  # noqa: BLE001
             log(f"experiment delete skipped: {e}")
+    endpoint = s.decisioning["endpoint"]["name"]
+    try:
+        w.serving_endpoints.delete(endpoint)
+        log(f"deleted serving endpoint {endpoint}")
+    except Exception as e:  # noqa: BLE001 - never created, or already gone
+        log(f"serving endpoint delete skipped: {type(e).__name__}")
     if state.catalog and state.warehouse_id:
         st = DatabricksStore("admin", s)
         # registered models live in schemas and are dropped with them (CASCADE)

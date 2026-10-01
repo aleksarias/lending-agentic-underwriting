@@ -32,3 +32,5 @@ reason_codes:
 approvals:
   promotion: {dev: 1, prod: 2}
   definition: {dev: 1, prod: 2}
+  policy: {dev: 1, prod: 2}
+  rollout: {dev: 1, prod: 2}       # switching serving to a new champion (after its shadow period)

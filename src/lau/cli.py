@@ -30,6 +30,17 @@ def _mount_evidence() -> None:
 
 
 _mount_evidence()
+
+
+def _mount_decision() -> None:
+    from lau.decision.cli import decision_app, policy_app, rollout_app
+
+    app.add_typer(policy_app, name="policy")
+    app.add_typer(decision_app, name="decision")
+    app.add_typer(rollout_app, name="rollout")
+
+
+_mount_decision()
 versions = typer.Typer(
     no_args_is_help=True, help="Version ledger for config, prompts, grants and code (show | record)."
 )

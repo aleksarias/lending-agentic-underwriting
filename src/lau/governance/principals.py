@@ -158,10 +158,18 @@ def grant_sp_user_role(w, sp_application_id: str, user_name: str, log: Callable[
     log(f"granted {role} on SP {sp_application_id} to {user_name} (needed to deploy run_as jobs)")
 
 
-def ensure_experiment(w, s: Settings, state: WorkspaceState, log: Callable[[str], None]) -> str:
+def ensure_experiment(
+    w,
+    s: Settings,
+    state: WorkspaceState,
+    log: Callable[[str], None],
+    path: str | None = None,
+    levels: dict | None = None,
+) -> str:
+    """The agents' experiment by default; `path`/`levels` for another (decision builds: harness + promoter only)."""
     from databricks.sdk.service.ml import ExperimentAccessControlRequest, ExperimentPermissionLevel
 
-    path = s.project.mlflow.experiment_path
+    path = path or s.project.mlflow.experiment_path
     parent = path.rsplit("/", 1)[0]
     w.workspace.mkdirs(parent)
     exp = w.experiments.get_by_name(path) if _exists(w, path) else None
@@ -170,7 +178,7 @@ def ensure_experiment(w, s: Settings, state: WorkspaceState, log: Callable[[str]
         if exp
         else w.experiments.create_experiment(path, tags=[_tag("project", "lau")]).experiment_id
     )
-    levels = {
+    levels = levels or {
         "harness": ExperimentPermissionLevel.CAN_MANAGE,
         "agent": ExperimentPermissionLevel.CAN_EDIT,
         "promoter": ExperimentPermissionLevel.CAN_READ,

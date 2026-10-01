@@ -8,7 +8,7 @@ from __future__ import annotations
 from fastapi import Request
 
 from lau.console import deps
-from lau.console.services import approvals, config, evals, events, ledger, models, ops
+from lau.console.services import approvals, config, decisions, evals, events, ledger, models, ops
 from lau.console.services import definitions as defs
 from lau.console.util import api_router, iso, now_utc, ttl_cache
 from lau.settings import get_settings
@@ -63,7 +63,7 @@ def _status_core() -> dict:
         "budget": {"month_to_date_usd": round(ops.month_to_date_usd(), 4), "hard_stop_usd": ops.hard_stop_usd()},
         "decisions_waiting": len(approvals.waiting_items()),
         "alerts_open": ops.open_alerts(),
-        "api": {"live": False, "p99_ms": None, "fallback_rate": None},
+        "api": decisions.api_brief(),
         "feed": {
             "live": False,
             "last_received_at": iso(latest_data["created_at"]) if latest_data else None,

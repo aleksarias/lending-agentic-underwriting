@@ -1,0 +1,29 @@
+# Credit policy: how a probability of default (PD) becomes a decision. It is separate from the model and separately
+# versioned (content hash): a change needs approval like a definition change (two-person rule in prod), but no new
+# model. A model change keeps the policy unless someone changes it.
+#
+# Starting values were measured on the 60 DPD validation window (2024-08 to 2024-12, 4,863 loans, 11.95% default):
+# - the reference model's PD (baseline v10) at <= 0.12 approves about 64%; 0.12 to 0.16 is about 9% of applicants
+# - legacy score >= 513 approves 70% (approved default rate 9.6%), the incumbent policy used as the fallback
+# - observed default rate by band: A 4.8%, B 5.8%, C 9.9%, D 14.1%, E 29.5%
+name: dev-initial
+
+decision:
+  approve_max_pd: 0.12   # approve when PD <= this
+  refer_max_pd: 0.16     # refer to a person when approve_max_pd < PD <= refer_max_pd; decline above
+
+knockouts:               # checked before any model; a failing application is declined with this reason
+  max_dti: 0.65          # debt-to-income above this (the 99th percentile is 0.60)
+  min_bureau_score: 560  # bureau score below this, when a score exists (thin files are scored, not knocked out)
+
+bands:                   # risk band by PD (upper bound, inclusive)
+  A: 0.04
+  B: 0.08
+  C: 0.12
+  D: 0.20
+  E: 1.0
+
+reason_codes: 4          # principal reasons returned on declines and refers (Regulation B: up to four)
+
+legacy:                  # the incumbent policy: decides while no model is serving, and when the model fails
+  min_score: 513

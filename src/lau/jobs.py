@@ -31,8 +31,26 @@ def _bootstrap_runtime() -> None:
         pass
 
 
+def _paths_from_args(argv: list[str]) -> list[str]:
+    """`--root <dir>`: the deployed bundle files (config/ is read from there). Reports go to a writable volume."""
+    if "--root" in argv:
+        i = argv.index("--root")
+        root = argv[i + 1]
+        argv = argv[:i] + argv[i + 2 :]
+        os.environ.setdefault("LAU_ROOT", root)
+        os.environ.setdefault("LAU_CONFIG_DIR", os.path.join(root, "config"))
+        os.environ.setdefault("LAU_STATE_DIR", os.path.join(root, ".lau"))
+    return argv
+
+
 def main() -> None:
+    sys.argv = _paths_from_args(sys.argv)
     _bootstrap_runtime()
+    if os.environ.get("DATABRICKS_RUNTIME_VERSION") and "LAU_REPORTS_DIR" not in os.environ:
+        from lau.settings import get_settings
+
+        s = get_settings()
+        os.environ["LAU_REPORTS_DIR"] = f"/Volumes/{s.catalog}/{s.schema('ops')}/landing/reports"
     task = sys.argv[1] if len(sys.argv) > 1 else ""
     if task == "definition-sync":
         from lau.pipeline import definition_ops as ops
@@ -42,6 +60,16 @@ def main() -> None:
             print("definition unchanged; nothing to do")
             return
         ops.apply(confirm=None, run_cycle=False)  # raises ApprovalRequiredError without a recorded approval
+    elif task == "decisions":
+        from lau.decision import log as decision_log
+        from lau.decision import traffic
+
+        try:
+            traffic.originate()  # one simulated month of synthetic applications, decided by the live decision model
+        except traffic.NoDecisionModelError as e:
+            print(f"no synthetic traffic today: {e}")  # until a person approves a policy and a build exists
+            return
+        decision_log.reconcile()  # decisions the endpoint made for anyone else (its inference table)
     elif task == "shadow":
         from lau.promotion.shadow import run_shadow
 

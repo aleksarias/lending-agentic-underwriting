@@ -1,0 +1,76 @@
+# Principal reasons for adverse action (declines and refers), as an applicant reads them. Each model input maps to one
+# statement code; a feature without a mapping gets R99 and is flagged so compliance can add it. Synthetic system:
+# counsel must approve the real statement list before any notice is sent.
+statements:
+  R01: Credit score is too low
+  R02: Monthly payment is high relative to income
+  R03: Debt is high relative to income
+  R04: High use of available revolving credit
+  R05: Too many recent requests for credit
+  R06: Recent late payments on credit accounts
+  R07: Limited credit history
+  R08: Short time with current employer
+  R09: Income could not be fully verified from bank statements
+  R10: Income varies a lot from month to month
+  R11: Spending is high relative to income
+  R12: Low account balances
+  R13: Recent returned payments on your account
+  R14: Recent overdrafts on your account
+  R15: Housing payments were not always on time
+  R16: Existing loan payments are high relative to income
+  R17: Requested amount or term is high for this application
+  R20: Information in your credit report
+  R99: Other factors in your application
+
+# exact feature name -> code
+features:
+  bureau_score: R01
+  legacy_score: R01         # the incumbent score-cutoff policy (no model serving, or the fallback)
+  bureau_score_missing: R07
+  pmt_to_income: R02
+  scheduled_payment: R02
+  dti: R03
+  util_revolving: R04
+  total_rev_balance: R04
+  inq_6m: R05
+  num_delinq_24m: R06
+  months_since_last_delinq: R06
+  num_open_trades: R07
+  thin_file: R07
+  employment_years: R08
+  annual_income: R09
+  cf_verified_to_stated_income: R09
+  cf_income_mean_6m: R09
+  cf_income_min_month_6m: R10
+  cf_income_cv_6m: R10
+  cf_expense_to_income_6m: R11
+  cf_min_balance_6m: R12
+  cf_avg_balance_6m: R12
+  cf_nsf_count_6m: R13
+  cf_overdraft_txn_count_6m: R14
+  cf_housing_on_time_share_6m: R15
+  cf_debt_payments_to_income_6m: R16
+  loan_amount: R17
+  term_months: R17
+  interest_rate: R17
+
+# for engineered features and anything not listed above: first matching substring wins
+patterns:
+  - [nsf, R13]
+  - [overdraft, R14]
+  - [housing, R15]
+  - [balance, R12]
+  - [liq, R12]
+  - [income_cv, R10]
+  - [income, R09]
+  - [expense, R11]
+  - [pmt, R02]
+  - [payment, R02]
+  - [debt, R16]
+  - [dti, R03]
+  - [util, R04]
+  - [inq, R05]
+  - [delinq, R06]
+  - [bureau_score, R01]
+  - [bur_attr, R20]
+  - [trade, R07]

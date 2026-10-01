@@ -109,18 +109,27 @@ def report(report_id: str) -> dict:
 
 @router.get("/lessons")
 def lessons() -> dict:
-    from lau.agents.lessons import read_lessons
+    """Lessons from ops.lessons (Databricks, or the mirror of it), else the local LESSONS.md."""
+    from lau.agents.lessons import _read_file
 
+    st = deps.ui_store()
+    if table_exists(st, "ops", "lessons"):
+        df = query(
+            st, f"SELECT id, definition_version, scope, status, text FROM {st.fq('ops', 'lessons')} ORDER BY ord"
+        )
+        rows = df.to_dict("records")
+    else:
+        rows = [x.__dict__ for x in _read_file()]
     return {
         "active_definition": defs.active_version(),
         "lessons": [
             {
-                "id": x.id,
-                "definition_version": x.definition_version,
-                "scope": x.scope,
-                "status": x.status,
-                "text": x.text,
+                "id": str(x["id"]),
+                "definition_version": str(x["definition_version"]),
+                "scope": str(x["scope"]),
+                "status": str(x["status"]),
+                "text": str(x["text"]),
             }
-            for x in read_lessons()
+            for x in rows
         ],
     }

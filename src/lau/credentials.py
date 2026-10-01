@@ -134,6 +134,9 @@ def role_env(role: str) -> Iterator[None]:
     Used only around MLflow calls in the orchestrating Python process; restored afterwards. Agent subprocesses
     are spawned with `agent_subprocess_env()` which blanks these keys regardless.
     """
+    if os.environ.get("LAU_RUNTIME_ROLE") == role:
+        yield  # inside a Databricks job as this identity: MLflow picks up the job's native credentials
+        return
     cfg = databricks_config(role)
     keys = [
         "DATABRICKS_HOST",

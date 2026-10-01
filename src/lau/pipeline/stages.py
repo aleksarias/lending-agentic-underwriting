@@ -255,7 +255,12 @@ def stage_feature_registry_eval(ctx: PipelineContext) -> dict:
     cat = st.query(f"SELECT * FROM {st.fq('curated', 'data_catalog')} WHERE definition_version = '{ctx.version}'")
     perf = freg.evaluate_features(st, specs, dev[dev["split"] == "train"], cat, s.thresholds["leakage"], ctx.version)
     freg.write_performance(st, perf, ctx.version)
-    return {"n_features": len(perf), "high_leakage": perf[perf["leakage_risk"] == "high"]["name"].tolist()}
+    statuses = freg.screen_statuses(st, perf) if ctx.activate else {}
+    return {
+        "n_features": len(perf),
+        "high_leakage": perf[perf["leakage_risk"] == "high"]["name"].tolist(),
+        **statuses,
+    }
 
 
 def stage_baseline_retrain(ctx: PipelineContext) -> dict:
@@ -466,9 +471,15 @@ def stage_improvement_cycle(ctx: PipelineContext) -> dict:
     return {"queued": True}
 
 
+# thresholds.yaml sections that only govern who may act (approval counts), never what a stage computes: changing
+# them must not invalidate the catalog, retrain the baseline or move the harness reference.
+GOVERNANCE_ONLY_SECTIONS = frozenset({"approvals"})
+
+
 def config_fingerprint(ctx: PipelineContext) -> str:
     s = get_settings()
-    return hashlib.sha256(json.dumps([s.thresholds, s.protected], sort_keys=True).encode()).hexdigest()[:12]
+    computed = {k: v for k, v in s.thresholds.items() if k not in GOVERNANCE_ONLY_SECTIONS}
+    return hashlib.sha256(json.dumps([computed, s.protected], sort_keys=True).encode()).hexdigest()[:12]
 
 
 def build_pipeline() -> Pipeline:

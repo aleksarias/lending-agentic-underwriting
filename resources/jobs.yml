@@ -1,5 +1,5 @@
 # Scheduled jobs. Every target deploys them PAUSED; turn them on per job in the workspace (or `lau schedules on`).
-# One daily job wakes the SQL warehouse once a day for all routine work; the weekly job runs an improvement cycle
+# One daily job wakes the SQL warehouse once a day for all routine work (synthetic decisions included); the weekly job runs an improvement cycle
 # only when one is queued. Both email the deploying user on failure, and the console's read-only identity may view them.
 resources:
   jobs:
@@ -19,31 +19,36 @@ resources:
         - environment_key: lau
           spec:
             environment_version: ${var.environment_version}
-            dependencies: ["../dist/*.whl"]
+            dependencies: ["../dist/*.whl", "scikit-learn==1.9.1", "lightgbm==4.7.0", "xgboost==3.4.1"]  # = uv.lock: pickled models load only with the versions that trained them (test_job_pins)
       tasks:
         - task_key: definition_sync
           environment_key: lau
-          python_wheel_task: {package_name: lending_agentic_underwriting, entry_point: lau-job, parameters: ["definition-sync"]}
-        - task_key: shadow
+          python_wheel_task: {package_name: lending_agentic_underwriting, entry_point: lau-job, parameters: ["definition-sync", "--root", "${workspace.file_path}"]}
+        - task_key: decisions
           depends_on: [{task_key: definition_sync}]
           run_if: ALL_DONE
           environment_key: lau
-          python_wheel_task: {package_name: lending_agentic_underwriting, entry_point: lau-job, parameters: ["shadow"]}
+          python_wheel_task: {package_name: lending_agentic_underwriting, entry_point: lau-job, parameters: ["decisions", "--root", "${workspace.file_path}"]}
+        - task_key: shadow
+          depends_on: [{task_key: decisions}]
+          run_if: ALL_DONE
+          environment_key: lau
+          python_wheel_task: {package_name: lending_agentic_underwriting, entry_point: lau-job, parameters: ["shadow", "--root", "${workspace.file_path}"]}
         - task_key: monitor
           depends_on: [{task_key: shadow}]
           run_if: ALL_DONE
           environment_key: lau
-          python_wheel_task: {package_name: lending_agentic_underwriting, entry_point: lau-job, parameters: ["monitor"]}
+          python_wheel_task: {package_name: lending_agentic_underwriting, entry_point: lau-job, parameters: ["monitor", "--root", "${workspace.file_path}"]}
         - task_key: evidence
           depends_on: [{task_key: monitor}]
           run_if: ALL_DONE
           environment_key: lau
-          python_wheel_task: {package_name: lending_agentic_underwriting, entry_point: lau-job, parameters: ["evidence"]}
+          python_wheel_task: {package_name: lending_agentic_underwriting, entry_point: lau-job, parameters: ["evidence", "--root", "${workspace.file_path}"]}
         - task_key: console_snapshot
           depends_on: [{task_key: evidence}]
           run_if: ALL_DONE
           environment_key: lau
-          python_wheel_task: {package_name: lending_agentic_underwriting, entry_point: lau-job, parameters: ["console-snapshot"]}
+          python_wheel_task: {package_name: lending_agentic_underwriting, entry_point: lau-job, parameters: ["console-snapshot", "--root", "${workspace.file_path}"]}
       timeout_seconds: 5400
 
     lau_improvement_cycle:
@@ -62,9 +67,9 @@ resources:
         - environment_key: lau
           spec:
             environment_version: ${var.environment_version}
-            dependencies: ["../dist/*.whl"]
+            dependencies: ["../dist/*.whl", "scikit-learn==1.9.1", "lightgbm==4.7.0", "xgboost==3.4.1"]  # = uv.lock: pickled models load only with the versions that trained them (test_job_pins)
       tasks:
         - task_key: cycle
           environment_key: lau
-          python_wheel_task: {package_name: lending_agentic_underwriting, entry_point: lau-job, parameters: ["run-cycle-if-queued"]}
+          python_wheel_task: {package_name: lending_agentic_underwriting, entry_point: lau-job, parameters: ["run-cycle-if-queued", "--root", "${workspace.file_path}"]}
       timeout_seconds: 5400

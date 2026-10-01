@@ -236,10 +236,18 @@ flowchart LR
   G -- fail --> X
   G -- pass --> H{"human approval\n(interactive, rationale → ops.approvals)"}
   H -- reject --> X
-  H -- approve --> P["lau-promoter SP copies model to production.pd_model\nalias champion_<v> (+ champion if definition active)"]
+  H -- approve --> P["lau-promoter SP copies model to production.pd_model\nalias champion_<v>; starts a rollout in shadow"]
+  P --> R["shadow: scores live decisions next to what serves\n(decides nothing; shadow report)"]
+  R --> RA{"people approve serving\n(approvals.rollout)"}
+  RA -- serve --> SV["serving alias moves; decision model rebuilt;\nendpoint updated"]
+  SV -- "rollback (one person)" --> RB["previous model or legacy policy serves again"]
   P --> S["shadow scoring: challengers vs serving on new applications\n(ops.shadow_scores, no decisions)"]
   P --> MON["monitoring: score/feature PSI, early indicators,\nobserved vs expected default → alerts → enqueue cycle"]
 ```
+
+Real-time decisions (approve / refer / decline with principal reasons) come from one registered **decision model** that
+embeds the serving champion, the approved credit policy (`config/policy.yaml`, versioned and approval-gated like a
+definition) and the reason statements; see [docs/decisioning.md](docs/decisioning.md).
 
 Reject inference / selection bias is documented, not silently "solved": see
 [docs/reject-inference.md](docs/reject-inference.md) (a strategy hook plus a controlled-approval experiment sizer).
@@ -306,12 +314,19 @@ make teardown                             # remove everything the project create
 | `lau console-snapshot publish` | publish what the console may read to the `ops.console` volume (also done by jobs, cycles and the commands below) |
 | `lau gate <ref>` / `lau decide <ref> --decision … --rationale …` / `lau promote-approved <ref>` | the promotion steps one at a time: holdout gate, a person's decision (two-person rule in prod), promotion |
 | `lau ack-alert <id> [--note]` | acknowledge a monitoring alert |
+| `lau policy plan` / `approve` / `apply` | credit policy: diff against the active one; approval needs a person at a terminal; activation needs the required approvals and rebuilds the decision model |
+| `lau decision status` / `build` | what decides now and whether registry, build and endpoint agree / build and register the decision model from approved state |
+| `lau decision deploy [--create]` | point the endpoint at the live build; `--create` creates the scale-to-zero endpoint (compute: needs your approval) |
+| `lau decision originate [--via auto\|endpoint\|inprocess]` | send the next simulated month of synthetic applications for decisions (ops.decisions) |
+| `lau decision check parity\|load\|rollback` | release checks: training-serving parity, latency against targets, rollback drill (ops.release_checks) |
+| `lau decision explain <decision_id>` / `reconcile` | adverse-action content for one decision / log decisions from the endpoint's inference table |
+| `lau rollout list` / `report` / `decide` / `serve` / `rollback` | shadow-first rollouts of promoted champions |
 | `lau teardown` | remove all project resources (restores an adopted warehouse) |
 
 ### Scheduled jobs (Asset Bundle, `databricks.yml`)
 
 `lau-definition-sync` (applies a changed definition only with a recorded approval), `lau-shadow-scoring`,
-`lau-daily` (definition sync, shadow scoring, monitoring, evidence and the console snapshot, in that order, waking the warehouse once a day) and `lau-improvement-cycle` (weekly; runs when `ops.cycle_queue` has work). All run on serverless compute as
+`lau-daily` (definition sync, synthetic decisions, shadow scoring, monitoring, evidence and the console snapshot, in that order, waking the warehouse once a day) and `lau-improvement-cycle` (weekly; runs when `ops.cycle_queue` has work). All run on serverless compute as
 the harness service principal and are deployed **paused**. Targets: `dev` (this workspace) and `prod` (placeholder).
 
 ## Underwriting Console (web UI)

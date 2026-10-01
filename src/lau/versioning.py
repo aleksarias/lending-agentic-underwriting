@@ -1,7 +1,8 @@
 """Version ledger: a content hash for everything that shapes a cycle, appended to `ops.config_versions` on change.
 
 Components
-  thresholds, budgets, protected_classes, models, benchmarks   config/*.yaml, parsed then canonical-JSON hashed
+  thresholds, budgets, protected_classes, models, benchmarks,  config/*.yaml, parsed then canonical-JSON hashed
+  decisioning, reason_statements
   grants                                                        `lau.governance.grants.GRANTS`, sorted canonical form
   prompt:<role>                                                 `agents/prompts/_common.md` + `<role>.md`
   code                                                          git HEAD of the project root, plus a dirty marker
@@ -32,7 +33,15 @@ from lau.governance import grants as grants_mod
 from lau.settings import CONFIG_DIR, ROOT
 from lau.store import Store, get_store
 
-CONFIG_COMPONENTS = ("thresholds", "budgets", "protected_classes", "models", "benchmarks")
+CONFIG_COMPONENTS = (
+    "thresholds",
+    "budgets",
+    "protected_classes",
+    "models",
+    "benchmarks",
+    "decisioning",
+    "reason_statements",
+)
 PROMPTS_DIR = Path(__file__).resolve().parent / "agents" / "prompts"
 CODE_PATHS = ("src", "pyproject.toml", "uv.lock")
 HASH_LEN = 12

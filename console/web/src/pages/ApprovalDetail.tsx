@@ -113,7 +113,10 @@ function Packet({ p }: { p: EvidencePacket }) {
       )}
       {promoted && (
         <Banner tone="good" title={`${p.model.label} was promoted as production v${promoted.production_model_version}`}>
-          {promoted.serving ? "It holds the serving alias." : "It is champion for its definition but not serving."} See <Link to="/rollouts">Rollouts</Link> for the record.
+          {promoted.serving
+            ? "It switched serving when it was promoted (before shadow-first rollouts)."
+            : "It is champion for its definition. It scores live decisions in shadow and decides nothing until its rollout is approved and served."}{" "}
+          See <Link to="/rollouts">Rollouts</Link>.
         </Banner>
       )}
       {blockers.length > 0 ? (

@@ -78,9 +78,17 @@ def test_current_versions_cover_every_component(vdirs):
     v = versioning.current_versions()
     roles = {p.stem for p in vdirs["prompts"].glob("*.md") if not p.name.startswith("_")}
     assert roles >= {"planner", "profiler", "feature", "modeling", "redteam", "compliance", "curator"}
-    assert set(v) == {"thresholds", "budgets", "protected_classes", "models", "benchmarks", "grants", "code"} | {
-        f"prompt:{r}" for r in roles
-    }
+    assert set(v) == {
+        "thresholds",
+        "budgets",
+        "protected_classes",
+        "models",
+        "benchmarks",
+        "decisioning",
+        "reason_statements",
+        "grants",
+        "code",
+    } | {f"prompt:{r}" for r in roles}
     for component, (version_hash, content) in v.items():
         if component != "code":
             assert re.fullmatch(r"[0-9a-f]{12}", version_hash), component
@@ -831,3 +839,72 @@ def test_liveness_writes_heartbeats_while_an_agent_runs(lake):
     finally:
         for table in ("cycle_heartbeat", "agent_trace"):
             st.execute(f"DELETE FROM {st.fq('ops', table)} WHERE cycle_id = '{cid}'")
+
+
+def test_curator_reverifies_only_flagged_lessons(tmp_path, monkeypatch):
+    from lau.agents import lessons as L
+
+    monkeypatch.setenv("LAU_LESSONS_FILE", str(tmp_path / "LESSONS.md"))  # never the session's shared file
+
+    v_old, v_new = "a" * 12, "b" * 12
+    L.write_lessons(
+        [
+            L.Lesson(
+                "L-aaa111", v_old, "definition-specific", f"unverified-under-{v_new[:8]}", "AUC on thin files is low."
+            ),
+            L.Lesson(
+                "L-bbb222", v_old, "definition-specific", f"unverified-under-{v_new[:8]}", "Bureau score dominates."
+            ),
+            L.Lesson("L-ccc333", v_new, "definition-specific", "active", "Already verified."),
+        ]
+    )
+    changed = L.set_statuses(
+        [
+            {"id": "L-aaa111", "status": "active", "reason": "thin-file AUC 0.66 again"},
+            {"id": "L-bbb222", "status": "retired", "reason": "cash-flow features now lead"},
+            {"id": "L-ccc333", "status": "retired", "reason": "should not change"},
+            {"id": "L-aaa111", "status": "bogus", "reason": "ignored"},
+        ],
+        v_new,
+    )
+    got = {le.id: (le.status, le.definition_version) for le in L.read_lessons()}
+    assert changed == ["L-aaa111", "L-bbb222"]
+    assert got["L-aaa111"] == ("active", v_new)  # verified lessons move to the active definition
+    assert got["L-bbb222"][0] == "retired" and got["L-ccc333"] == ("active", v_new)
+
+
+def test_inside_a_job_the_run_as_role_keeps_native_credentials(monkeypatch):
+    """Jobs run as the harness identity with native auth (no client id): MLflow calls must not touch the env."""
+    import os
+
+    from lau.credentials import role_env
+
+    monkeypatch.setenv("LAU_RUNTIME_ROLE", "harness")
+    monkeypatch.setenv("DATABRICKS_HOST", "https://runtime.example")
+    monkeypatch.delenv("DATABRICKS_CLIENT_ID", raising=False)
+    with role_env("harness"):
+        assert os.environ["DATABRICKS_HOST"] == "https://runtime.example"
+        assert "DATABRICKS_CLIENT_ID" not in os.environ
+    assert os.environ["DATABRICKS_HOST"] == "https://runtime.example"
+
+
+def test_approval_counts_never_invalidate_pipeline_stages(monkeypatch):
+    """Governance-only config (who must approve) must not retrain the baseline or move the harness reference."""
+    from lau.pipeline import stages
+
+    s = stages.get_settings()
+    before = stages.config_fingerprint(None)
+    monkeypatch.setitem(s.thresholds, "approvals", {"promotion": {"dev": 5, "prod": 9}})
+    assert stages.config_fingerprint(None) == before
+    monkeypatch.setitem(s.thresholds, "gate", {**s.thresholds["gate"], "unit_probe": 1})
+    assert stages.config_fingerprint(None) != before
+
+
+def test_job_pins_match_the_locked_model_libraries():
+    """Jobs load models pickled locally: the serverless environment must run the same model library versions."""
+    from importlib.metadata import version
+
+    jobs = (Path(__file__).resolve().parents[2] / "resources" / "jobs.yml").read_text()
+    for lib in ("scikit-learn", "lightgbm", "xgboost"):
+        pins = set(re.findall(rf'"{lib}==([^"]+)"', jobs))
+        assert pins == {version(lib)}, f"{lib}: jobs.yml pins {pins or 'nothing'}, uv.lock has {version(lib)}"

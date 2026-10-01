@@ -21,6 +21,11 @@ artifacts:
 include:
   - resources/*.yml
 
+# Jobs read workspace ids (warehouse, catalog, service principals; no secrets) from the git-ignored state file.
+sync:
+  include:
+    - .lau/workspace_state.json
+
 # The jobs run as the harness service principal, which must read the deployed wheel in the bundle's workspace folder
 # (top-level permissions also apply to that folder).
 permissions:

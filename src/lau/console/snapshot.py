@@ -10,7 +10,7 @@ console running on a laptop mirrors the workspace through the Files API instead 
   hash changed into a local DuckDB lake, which the console reads. Files API calls need no warehouse.
 
 Volume layout under /Volumes/<catalog>/<ops>/console/: manifest.json, tables/<schema>.<table>.parquet,
-extras/jobs.json, extras/billing.parquet, live/current.json.
+extras/jobs.json, extras/billing.parquet, extras/decision_api.json, live/current.json.
 """
 
 from __future__ import annotations
@@ -43,6 +43,10 @@ LIVE = "live/current.json"
 UI_SCHEMAS = ("ops", "experiments", "feature_registry", "production")
 MAX_ROWS = 200_000
 SHADOW_RUNS_KEPT = 3  # row-level shadow scores: only the newest runs (the console shows aggregates)
+DECISION_DAYS_KEPT = 90  # the decision log is append-only and grows daily: the console needs recent decisions
+# Never copied to your machine: raw request payloads (the endpoint's inference table) and the simulator's truth.
+SNAPSHOT_EXCLUDED_SUFFIXES = ("_payload",)
+SNAPSHOT_EXCLUDED = {("ops", "sim_truth")}
 LIVE_TRACE_ROWS = 400
 
 
@@ -168,7 +172,9 @@ def snapshot_tables(st) -> list[tuple[str, str]]:
             names = sorted(df["table_name"])
         else:
             names = sorted(t.name for t in st.w.tables.list(catalog_name=s.catalog, schema_name=s.schema(key)))
-        out += [(key, n) for n in names]
+        out += [
+            (key, n) for n in names if (key, n) not in SNAPSHOT_EXCLUDED and not n.endswith(SNAPSHOT_EXCLUDED_SUFFIXES)
+        ]
     for key, objs in UI_READABLE_OBJECTS.items():
         out += [(key, o) for o in objs if st.table_exists(key, o)]
     return out
@@ -179,6 +185,9 @@ def _table_sql(st, key: str, table: str) -> str:
     if (key, table) == ("ops", "shadow_scores"):
         newest = f"SELECT DISTINCT scored_at FROM {fq} ORDER BY scored_at DESC LIMIT {SHADOW_RUNS_KEPT}"
         return f"SELECT * FROM {fq} WHERE scored_at >= (SELECT min(scored_at) FROM ({newest}) newest)"
+    if (key, table) == ("ops", "decisions"):
+        since = f"(SELECT max(decided_at) FROM {fq}) - INTERVAL {DECISION_DAYS_KEPT} DAYS"
+        return f"SELECT * FROM {fq} WHERE decided_at >= {since} ORDER BY decided_at DESC LIMIT {MAX_ROWS}"
     return f"SELECT * FROM {fq} LIMIT {MAX_ROWS}"
 
 
@@ -207,6 +216,31 @@ def next_quartz_run(expr: str | None, after: datetime | None = None) -> datetime
         candidate = base + timedelta(days=days)
         return candidate if candidate > after else candidate + timedelta(days=7)
     return None
+
+
+def endpoint_info(w) -> dict:
+    """State of the decision endpoint as the ui identity sees it (CAN_VIEW, granted when the endpoint is created)."""
+    name = get_settings().decisioning["endpoint"]["name"]
+    try:
+        ep = w.serving_endpoints.get(name)
+    except Exception as e:  # noqa: BLE001 - not created yet, or not viewable
+        if "does not exist" in str(e).lower() or "not found" in str(e).lower() or "NotFound" in type(e).__name__:
+            return {"name": name, "exists": False}
+        raise
+    served = (ep.config.served_entities or []) if ep.config else []
+    ready = str(getattr(ep.state, "ready", "") or "")
+    update = str(getattr(ep.state, "config_update", "") or "")
+    return {
+        "name": name,
+        "exists": True,
+        "ready": ready.endswith("READY") and "NOT_READY" not in ready,
+        "updating": update.endswith("IN_PROGRESS"),
+        "update_failed": update.endswith("UPDATE_FAILED"),
+        "served_version": served[0].entity_version if served else None,
+        "workload_size": served[0].workload_size if served else None,
+        "scale_to_zero": served[0].scale_to_zero_enabled if served else None,
+        "checked_at": _now().isoformat(),
+    }
 
 
 def jobs_info(w) -> list[dict]:
@@ -306,6 +340,13 @@ def publish(
             extras["jobs"] = {"file": "extras/jobs.json", "sha256": _sha(data), "available": True}
         except Exception as e:  # noqa: BLE001
             extras["jobs"] = {"available": False, "reason": f"jobs are not viewable ({type(e).__name__})"}
+        try:
+            data = _json(endpoint_info(st.w))
+            vol.write("extras/decision_api.json", data)
+            extras["decision_api"] = {"file": "extras/decision_api.json", "sha256": _sha(data), "available": True}
+        except Exception as e:  # noqa: BLE001
+            reason = f"the endpoint is not viewable ({type(e).__name__})"
+            extras["decision_api"] = {"available": False, "reason": reason}
         bill, reason = billing_frame(st)
         if bill is not None:
             data = _parquet(bill)

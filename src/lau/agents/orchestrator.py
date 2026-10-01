@@ -560,8 +560,38 @@ def _write_cycle_report(ctx: CycleContext, o: dict):
         "human approval._",
     ]
     p = d / "cycle_report.md"
-    p.write_text("\n".join(lines) + "\n")
+    text = "\n".join(lines) + "\n"
+    p.write_text(text)
+    _store_cycle_report(ctx, text)
     return p
+
+
+def _store_cycle_report(ctx: CycleContext, text: str) -> None:
+    """Keep the cycle report with the agent reports too, so it reaches the console from any machine or job."""
+    try:
+        get_store("harness").write_df(
+            "experiments",
+            "reports",
+            pd.DataFrame(
+                [
+                    {
+                        "report_id": f"cr-{ctx.cycle_id}",
+                        "cycle_id": ctx.cycle_id,
+                        "definition_version": ctx.version,
+                        "author": "orchestrator",
+                        "kind": "cycle_report",
+                        "title": f"Cycle report {ctx.cycle_id}",
+                        "body": text[:200_000],
+                        "candidate_ref": None,
+                        "verdict": None,
+                        "created_at": datetime.now(UTC),
+                    }
+                ]
+            ),
+            mode="append",
+        )
+    except Exception as e:  # noqa: BLE001 - the file copy exists; the console falls back to it
+        print(f"warning: cycle report not stored in experiments.reports ({type(e).__name__}: {str(e)[:120]})")
 
 
 async def run_single_agent(role: str) -> dict:

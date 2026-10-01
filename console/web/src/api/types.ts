@@ -94,7 +94,14 @@ export interface StatusSummary {
   budget: { month_to_date_usd: number; hard_stop_usd: number };
   decisions_waiting: number;
   alerts_open: { high: number; medium: number };
-  api: { live: boolean; p99_ms?: number | null; fallback_rate?: number | null };
+  /** The decision API chip: state of the live decision model and endpoint; p99 from the latest load check. */
+  api: {
+    live: boolean;
+    state?: DecisionApiState;
+    label?: string;
+    p99_ms?: number | null;
+    fallback_rate?: number | null;
+  };
   feed: { live: boolean; last_received_at?: ISODate | null; quality_failures?: number | null };
   actions_enabled: boolean;
   user: string;
@@ -814,8 +821,50 @@ export interface Promotion {
   approval_id: string;
 }
 
+export type RolloutState = "shadow" | "serving" | "retired" | "rolled_back" | "superseded";
+
+export interface RolloutReport {
+  n: number;
+  model_version?: string;
+  /** Share of decisions where the shadow champion would have decided the same */
+  agreement?: number;
+  serving?: { approve: number; refer: number; decline: number };
+  shadow?: { approve: number; refer: number; decline: number };
+  approve_to_decline?: number;
+  decline_to_approve?: number;
+  mean_pd_serving?: number | null;
+  mean_pd_shadow?: number | null;
+  fallback_share?: number;
+}
+
+export interface Rollout {
+  rollout_id: string;
+  state: RolloutState;
+  model_version: string;
+  definition_version: string;
+  promotion_id: string | null;
+  started_at: ISODate;
+  started_by: string;
+  updated_at: ISODate;
+  /** Set once it served: what a rollback restores (null = the legacy policy) */
+  previous_serving_version: string | null;
+  events: { event: string; state: RolloutState; ts: ISODate; by: string; note: string | null }[];
+  approvals: {
+    required: number;
+    approvers: string[];
+    rejected_by: string[];
+    decisions: { approver: string; decision: "approve" | "reject"; note: string | null; ts: ISODate }[];
+  };
+  report: RolloutReport;
+}
+
 export interface RolloutsData {
-  live: Unavailable;
+  available: boolean;
+  reason: string | null;
+  rollouts: Rollout[];
+  /** Shadow decisions a rollout needs before it can serve */
+  min_shadow_decisions: number;
+  required_approvals: number;
   promotions: Promotion[];
 }
 
@@ -852,9 +901,112 @@ export interface AlertsData {
   monitoring_runs: { ts: ISODate; definition_version: string; score_psi: number | null; max_feature_psi: number | null; alerts: number }[];
 }
 
+export type DecisionApiState = "endpoint" | "endpoint_not_ready" | "in_process" | "not_built" | "no_policy";
+export type DecisionOutcome = "approve" | "refer" | "decline";
+
+export interface PolicyInfo {
+  version: string;
+  name: string;
+  activated_at: ISODate | null;
+  activated_by: string | null;
+  approve_max_pd: number | null;
+  refer_max_pd: number | null;
+  knockouts: { max_dti: number | null; min_bureau_score: number | null };
+  bands: { band: string; max_pd: number }[];
+  reason_codes: number | null;
+  legacy_min_score: number | null;
+  approvers: string[];
+}
+
+export interface ReleaseCheck {
+  check: "parity" | "load" | "rollback";
+  passed: boolean;
+  run_at: ISODate;
+  build_id: string | null;
+  summary: string;
+  details: Record<string, unknown>;
+}
+
+export interface DecisionApiStatus {
+  state: DecisionApiState;
+  endpoint: {
+    name: string;
+    exists: boolean;
+    /** false when the snapshot has not reported the endpoint (console not in mirror mode) */
+    known?: boolean;
+    ready?: boolean;
+    updating?: boolean;
+    update_failed?: boolean;
+    served_version?: string | null;
+    workload_size?: string | null;
+    scale_to_zero?: boolean | null;
+    checked_at?: ISODate | null;
+    reason?: string;
+  };
+  live_build: {
+    version: string;
+    build_id: string;
+    built_at: ISODate | null;
+    built_by: string | null;
+    versions: Record<string, string | null>;
+  } | null;
+  serving_model_version: string | null;
+  shadow_model_version: string | null;
+  policy_version: string | null;
+  /** Disagreements between registry, live build and endpoint, as sentences */
+  gaps: string[];
+  checks: ReleaseCheck[];
+  targets: { p95_ms: number; p99_ms: number };
+}
+
+export interface DecisionRow {
+  decision_id: string;
+  application_id: string;
+  decided_at: ISODate | null;
+  /** Date the decision was made for (simulated, for synthetic traffic) */
+  decision_date: string | null;
+  decision: DecisionOutcome;
+  path: "model" | "knockout" | "legacy";
+  probability_of_default: number | null;
+  risk_band: string | null;
+  reason_codes: string[];
+  model_version: string | null;
+  policy_version: string | null;
+  fallback_used: boolean;
+  latency_ms: number | null;
+  shadow_decision: DecisionOutcome | null;
+}
+
+export interface DecisionDetail extends DecisionRow {
+  definition_version: string | null;
+  build_id: string | null;
+  code_version: string | null;
+  fallback_reason: string | null;
+  reasons_missing: boolean;
+  client_latency_ms: number | null;
+  source: string | null;
+  is_test: boolean;
+  reasons: { rank: number; code: string; statement: string; feature: string | null; mapped: boolean }[];
+  notice: { required: boolean; principal_reasons: { rank: number; code: string; statement: string }[]; caveat: string | null };
+  shadow: { model_version: string | null; decision: DecisionOutcome | null; probability_of_default: number | null } | null;
+}
+
 export interface DecisionsData {
-  live: Unavailable;
-  preview: { endpoint: string; example_response: Record<string, unknown>; policy_version: string | null };
+  available: boolean;
+  reason: string | null;
+  window_days: number;
+  as_of: ISODate | null;
+  totals: { n: number; approve: number; refer: number; decline: number; fallback: number; reasons_missing: number; unmapped: number } | null;
+  shares: { approve: number | null; refer: number | null; decline: number | null; fallback: number | null } | null;
+  latency: { model_p50_ms: number | null; model_p95_ms: number | null; load_check: ReleaseCheck | null; targets: { p95_ms: number; p99_ms: number } } | null;
+  daily: { date: string; n: number; approve: number; refer: number; decline: number; fallback: number }[];
+  paths: { path: string; n: number }[];
+  versions: { model_version: string | null; policy_version: string | null; build_id: string | null; n: number; first: ISODate; last: ISODate }[];
+  bands: { band: string; n: number; approve_share: number }[];
+  reasons: { code: string; statement: string; n: number; share: number }[];
+  recent: DecisionRow[];
+  policy: PolicyInfo | null;
+  api: DecisionApiStatus;
 }
 
 // --------------------------------------------------------------------------------------------------------- cost

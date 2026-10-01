@@ -1,5 +1,8 @@
 """Console API (screens 16-18, operate):
-- GET /api/rollouts                 promotions; staged rollouts are Unavailable until the decision API exists
+- GET /api/rollouts                 shadow-first rollouts (state, events, approvals, shadow report) and promotions
+- POST /api/rollouts/{id}/decide    {decision: approve|reject, note}; two-person rule (approvals.rollout)
+- POST /api/rollouts/{id}/serve     the approved champion starts deciding (promoter identity)
+- POST /api/rollouts/{id}/rollback  {reason}; serving returns to the previous model or the legacy policy
 - GET /api/shadow                   shadow-scoring aggregates
 - GET /api/alerts                   monitoring alerts and runs
 - POST /api/alerts/{alert_id}/ack   {note}; appends to ops.alert_acks as the harness identity
@@ -13,20 +16,23 @@ from fastapi import Body, Depends, HTTPException, Request
 
 from lau.console import actions, deps
 from lau.console.services import models, ops
-from lau.console.util import api_router, boolean, clear_cache, iso, safe_token, text, unavailable
+from lau.console.util import api_router, boolean, clear_cache, iso, safe_token, text
 
 router = api_router()
 
 
 @router.get("/rollouts")
 def rollouts() -> dict:
+    from lau.console.services import decisions
+
     df = models.promotions()
+    view = decisions.rollouts_view()
     return {
-        "live": unavailable(
-            "Staged rollouts (canary share, automatic rollback) need the real-time decision API. Today a promotion "
-            "moves the serving alias in one step, and rollback means promoting the previous champion again.",
-            ["Real-time decision API (Model Serving) with traffic splitting", "Decision log for rollout monitoring"],
-        ),
+        "available": True,
+        "reason": None
+        if view["rollouts"]
+        else "No champion has been promoted since rollouts started: a promotion starts one in shadow.",
+        **view,
         "promotions": [
             {
                 "promotion_id": str(r["promotion_id"]),
@@ -43,6 +49,51 @@ def rollouts() -> dict:
         if len(df)
         else [],
     }
+
+
+def _rollout_or_404(rollout_id: str) -> None:
+    from lau.console.services import decisions
+
+    if not safe_token(rollout_id):
+        raise HTTPException(status_code=400, detail="invalid rollout id")
+    if rollout_id not in {r["rollout_id"] for r in decisions.rollouts_list()}:
+        raise HTTPException(status_code=404, detail="unknown rollout")
+
+
+@router.post("/rollouts/{rollout_id}/decide", dependencies=[Depends(deps.require_actions)])
+def rollout_decide(rollout_id: str, request: Request, body: dict = Body(default={})) -> dict:
+    _rollout_or_404(rollout_id)
+    decision = str(body.get("decision") or "")
+    if decision not in ("approve", "reject"):
+        raise HTTPException(status_code=400, detail="decision must be approve or reject")
+    result = actions.dispatch(
+        "rollout_decide",
+        rollout_id=rollout_id,
+        decision=decision,
+        note=str(body.get("note") or ""),
+        approver=deps.current_user(request),
+    )
+    clear_cache()
+    return result
+
+
+@router.post("/rollouts/{rollout_id}/serve", dependencies=[Depends(deps.require_actions)])
+def rollout_serve(rollout_id: str, request: Request) -> dict:
+    _rollout_or_404(rollout_id)
+    result = actions.dispatch("rollout_serve", rollout_id=rollout_id, by=deps.current_user(request))
+    clear_cache()
+    return result
+
+
+@router.post("/rollouts/{rollout_id}/rollback", dependencies=[Depends(deps.require_actions)])
+def rollout_rollback(rollout_id: str, request: Request, body: dict = Body(default={})) -> dict:
+    _rollout_or_404(rollout_id)
+    reason = str(body.get("reason") or "").strip()
+    if len(reason) < 10:
+        raise HTTPException(status_code=400, detail="a rollback needs a reason of at least 10 characters")
+    result = actions.dispatch("rollout_rollback", rollout_id=rollout_id, reason=reason, by=deps.current_user(request))
+    clear_cache()
+    return result
 
 
 @router.get("/shadow")
