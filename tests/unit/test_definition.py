@@ -267,6 +267,12 @@ def test_custom_predicate_sandbox_rejects(bad):
         normalize_predicate(bad)
 
 
+@pytest.mark.xfail(
+    strict=True,
+    raises=NotImplementedError,
+    reason="TODO(human): the cure rule in lau/definition/label_builder.py is an open exercise. "
+    "Once it is implemented this test passes, strict mode turns that into a failure: remove this marker.",
+)
 def test_cure_rule_cured_loan_is_not_default():
     """A loan that hits 90 DPD at mob 4 and is then current for 8 months is cured under cured_not_default."""
     import pandas as pd

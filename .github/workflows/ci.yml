@@ -1,0 +1,54 @@
+# Checks every push and pull request. Offline only: unit tests run on the local DuckDB backend with synthetic data,
+# so no Databricks or Anthropic credentials are needed (integration tests stay manual: `make test-integration`).
+name: ci
+
+on:
+  push:
+    branches: [main, console-evidence]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      - run: uv run ruff check src tests scripts
+      - run: uv run ruff format --check src tests scripts
+      - run: uv run pytest tests/unit -q -p no:cacheprovider
+
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: console/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: console/web/package-lock.json
+      - run: npm ci
+      - run: npm run check
+      - run: npm run build
+
+  secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        run: |
+          curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz | tar -xz gitleaks
+          ./gitleaks git --config .gitleaks.toml --redact --exit-code 1 .
